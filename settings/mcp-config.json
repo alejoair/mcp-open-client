@@ -2,7 +2,10 @@
   "mcpServers": {
     "Context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
     },
     "sequential-thinking": {
       "command": "python",
@@ -14,19 +17,18 @@
       "command": "python",
       "args": [
         "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-requests\\src\\server.py"
-      ]
+      ],
+      "disabled": true
     },
-    "file-manager": {
-      "command": "python",
+    "dfsafd": {
+      "disabled": false,
+      "command": "adsfasdf",
       "args": [
-        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-filemanager.py"
-      ]
-    },
-    "mcp-terminal": {
-      "command": "python",
-      "args": [
-        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-terminal\\src\\mcp_terminal\\server.py"
-      ]
+        "adfadf"
+      ],
+      "env": {
+        "asdfadsf": "2312423"
+      }
     }
   }
 }
