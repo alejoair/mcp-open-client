@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "Context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "sequential-thinking": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Usuario\\Desktop\\mcp\\sequential-thinking\\sequentialthinking.py"
+      ]
+    },
+    "mcp-requests": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-requests\\src\\server.py"
+      ]
+    },
+    "file-manager": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-filemanager.py"
+      ]
+    },
+    "mcp-terminal": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-terminal\\src\\mcp_terminal\\server.py"
+      ]
+    }
+  }
+}
