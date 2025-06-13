@@ -86,12 +86,11 @@ def index():
     def is_active(section):
         return 'active' if section == active_section else ''
     
-    content_container = ui.row().classes('nicegui-content')
+    content_container = ui.row().classes('h-full w-full')
     
     def update_content(section):
         nonlocal active_section
-        active_section = section  # ✅ Variable local, NO storage
-        
+        active_section = section  # ✅ Variable local, NO storag
         # Actualizar las clases de los elementos del menú
         for item in left_drawer.default_slot.children:
             if hasattr(item, 'default_slot') and item.default_slot.children:
@@ -113,7 +112,7 @@ def index():
         elif section == 'chat':
             show_chat_content(content_container)
     
-    with ui.header(elevated=True).classes('app-header q-px-md'):
+    with ui.header(elevated=True).classes('app-header'):
         with ui.row().classes('items-center full-width'):
             with ui.row().classes('items-center'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat').classes('q-mr-sm')
@@ -174,18 +173,16 @@ def index():
                 f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("chat")}'
             )
     
-    with ui.footer().classes('app-footer q-pa-lg'):
+    with ui.footer().classes(''):
         with ui.row().classes('w-full items-center justify-between'):
             ui.label('© 2025 MCP Open Client').classes('text-subtitle2')
             with ui.row().classes('items-center'):
-                ui.label('Version: 1.0.0').classes('text-caption q-mr-md')
                 ui.button('Documentation', on_click=lambda: ui.open('https://docs.mcp-open-client.com')).props('flat dense size="sm"').classes('documentation-btn')
-        with ui.row().classes('w-full justify-center q-mt-md'):
-            ui.label('Made with ❤️ by the MCP Open Client Team').classes('text-caption')
+
     
     # Set home as the default content
     update_content('home')
 
 # Configurar el puerto
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(storage_secret="ultrasecretkeyboard", port=8081, reload=True, dark=True, show_welcome_message=True)
+    ui.run(storage_secret="ultrasecretkeyboard", port=8081, reload=True, dark=True, show_welcome_message=True, show=False)

@@ -31,7 +31,7 @@ def show_content(container):
     """Main function to display the MCP servers management UI"""
     container.clear()
     
-    with container:
+    with container.classes('q-pa-md'):
         ui.label('MCP SERVERS').classes('text-h4')
         ui.label('Manage your MCP servers configuration.')
         ui.separator()
@@ -68,7 +68,7 @@ def show_content(container):
             
             with servers_container:
                 # Create a grid layout for server cards
-                with ui.grid(columns=3).classes('w-full gap-4'):
+                with ui.grid(columns=3).classes('w-full gap-2'):
                     for name, config in current_servers.items():
                         # Determine server type
                         if 'url' in config:
@@ -89,7 +89,7 @@ def show_content(container):
                         status = 'Disabled' if is_disabled else 'Active'
                         
                         # Create a card for each server with hover effect
-                        with ui.card().classes('w-full transition-shadow hover:shadow-lg'):
+                        with ui.card().classes('w-full transition-shadow hover:shadow-lg q-ma-sm'):
                             # Card header with server name and status badge
                             with ui.card_section().classes(f"{'bg-primary' if status == 'Active' else 'bg-grey-7'} text-white"):
                                 with ui.row().classes('w-full items-center justify-between'):
@@ -99,7 +99,7 @@ def show_content(container):
                                     ui.badge(status).classes(f"{'bg-green' if status == 'Active' else 'bg-red'} text-white")
                             
                             # Card content with server details and switch
-                            with ui.card_section().classes('q-pa-md'):
+                            with ui.card_section().classes('q-pa-sm'):
                                 with ui.row().classes('w-full items-center justify-between q-mb-sm'):
                                     with ui.column().classes('items-start'):
                                         ui.label(f"Type: {server_type}").classes('text-bold')
