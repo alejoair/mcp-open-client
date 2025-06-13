@@ -1,0 +1,138 @@
+from typing import Optional, Callable
+import asyncio
+from nicegui import ui, app
+from .chat_handlers import (
+    get_all_conversations, create_new_conversation, load_conversation,
+    delete_conversation, get_current_conversation_id
+)
+
+class ConversationManager:
+    def __init__(self):
+        self._refresh_chat_callback: Optional[Callable] = None
+        self._conversations_container: Optional[ui.column] = None
+    
+    def set_refresh_callback(self, callback: Callable):
+        """Set the callback function to refresh chat UI"""
+        self._refresh_chat_callback = callback
+    
+    def refresh_chat_ui(self):
+        """Refresh the chat UI - calls the registered callback (sync or async)"""
+        if self._refresh_chat_callback:
+            # Check if the callback is a coroutine function (async)
+            if asyncio.iscoroutinefunction(self._refresh_chat_callback):
+                # Create a task to run the async callback
+                asyncio.create_task(self._refresh_chat_callback())
+            else:
+                # Call sync callback normally
+                self._refresh_chat_callback()
+    
+    def refresh_conversations_list(self):
+        """Refresh the conversations list in the sidebar"""
+        if self._conversations_container:
+            self._conversations_container.clear()
+            self._populate_conversations_list()
+    
+    def _populate_conversations_list(self):
+        """Populate the conversations list"""
+        if not self._conversations_container:
+            return
+            
+        conversations = get_all_conversations()
+        current_id = get_current_conversation_id()
+        
+        with self._conversations_container:
+            if not conversations:
+                ui.label('No conversations yet').classes('text-gray-500 text-sm p-2')
+                return
+            
+            # Sort conversations by updated_at (most recent first)
+            sorted_conversations = sorted(
+                conversations.items(),
+                key=lambda x: x[1].get('updated_at', '0'),
+                reverse=True
+            )
+            
+            for conv_id, conv_data in sorted_conversations:
+                title = conv_data.get('title', f'Conversation {conv_id[:8]}')
+                message_count = len(conv_data.get('messages', []))
+                
+                # Highlight current conversation
+                card_classes = 'w-full p-2 mb-1 cursor-pointer hover:bg-gray-100'
+                if conv_id == current_id:
+                    card_classes += ' bg-blue-100 border-l-4 border-blue-500'
+                
+                with ui.card().classes(card_classes) as conv_card:
+                    with ui.row().classes('w-full items-center justify-between'):
+                        with ui.column().classes('flex-1'):
+                            ui.label(title).classes('font-medium text-sm')
+                            ui.label(f'{message_count} messages').classes('text-xs text-gray-500')
+                        
+                        # Delete button
+                        delete_btn = ui.button(
+                            icon='delete',
+                            on_click=lambda conv_id=conv_id: self._delete_conversation(conv_id)
+                        ).props('flat round size=sm color=red').classes('ml-2')
+                    
+                    # Click to load conversation
+                    conv_card.on('click', lambda conv_id=conv_id: self._load_conversation(conv_id))
+    
+    def _load_conversation(self, conversation_id: str):
+        """Load a specific conversation"""
+        load_conversation(conversation_id)
+        self.refresh_conversations_list()
+        self.refresh_chat_ui()
+        # Switch to chat view automatically
+        from mcp_open_client.main import current_update_content_function
+        if current_update_content_function:
+            current_update_content_function('chat')
+    
+    def _delete_conversation(self, conversation_id: str):
+        """Delete a conversation with confirmation"""
+        def confirm_delete():
+            delete_conversation(conversation_id)
+            self.refresh_conversations_list()
+            self.refresh_chat_ui()
+            dialog.close()
+        
+        def cancel_delete():
+            dialog.close()
+        
+        with ui.dialog() as dialog:
+            with ui.card():
+                ui.label('Delete Conversation?').classes('text-h6 mb-4')
+                ui.label('This action cannot be undone.').classes('mb-4')
+                
+                with ui.row().classes('w-full justify-end gap-2'):
+                    ui.button('Cancel', on_click=cancel_delete).props('flat')
+                    ui.button('Delete', on_click=confirm_delete).props('color=red')
+        
+        dialog.open()
+    
+    def _create_new_conversation(self):
+        """Create a new conversation"""
+        create_new_conversation()
+        self.refresh_conversations_list()
+        self.refresh_chat_ui()
+    
+    def create_conversation_sidebar(self):
+        """Create the conversation management sidebar"""
+        with ui.column().classes('w-full h-full p-4 bg-gray-50'):
+            # Header
+            ui.label('Conversations').classes('text-lg font-bold mb-4')
+            
+            # New conversation button
+            ui.button(
+                'New Conversation',
+                icon='add',
+                on_click=self._create_new_conversation
+            ).classes('w-full mb-4').props('color=primary')
+            
+            # Conversations list
+            ui.separator().classes('mb-4')
+            
+            with ui.scroll_area().classes('w-full flex-1'):
+                self._conversations_container = ui.column().classes('w-full')
+                self._populate_conversations_list()
+
+# Global instance
+conversation_manager = ConversationManager()

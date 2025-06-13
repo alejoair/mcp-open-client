@@ -5,13 +5,15 @@
       "args": [
         "-y",
         "@upstash/context7-mcp"
-      ]
+      ],
+      "disabled": false
     },
     "sequential-thinking": {
       "command": "python",
       "args": [
         "C:\\Users\\Usuario\\Desktop\\mcp\\sequential-thinking\\sequentialthinking.py"
-      ]
+      ],
+      "disabled": true
     },
     "mcp-requests": {
       "command": "python",
@@ -21,7 +23,7 @@
       "disabled": true
     },
     "dfsafd": {
-      "disabled": false,
+      "disabled": true,
       "command": "adsfasdf",
       "args": [
         "adfadf"

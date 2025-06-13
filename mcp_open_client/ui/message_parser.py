@@ -8,7 +8,6 @@ def parse_and_render_message(message: str, container) -> None:
     
     Detects code blocks marked with triple backticks (```) and renders them
     using ui.code component, while rendering regular text as ui.markdown.
-    Only Python code blocks get an execute button.
     
     Args:
         message: The message content to parse
@@ -44,15 +43,10 @@ def parse_and_render_message(message: str, container) -> None:
                 text_before = message[last_end:start].strip()
                 if text_before:
                     ui.markdown(text_before)
-            
-            # Render code block with execute button ONLY for Python
+            # Render code block
             if code_content:
-                with ui.row().classes('items-start'):
-                    ui.code(code_content, language=language).classes('w-full my-2 nicegui-code')
-                    # Only add execute button for Python code
-                    if language == 'python':
-                        from .python_executor import execute_python_code
-                        ui.button('▶', on_click=lambda code=code_content: execute_python_code(code)).props('size=sm round color=green').classes('ml-2 mt-2')
+                ui.code(code_content, language=language).classes('w-full my-2 nicegui-code')
+            
             
             last_end = end
         

@@ -12,6 +12,13 @@ from mcp_open_client.ui.chat_window import show_content as show_chat_content
 # Import MCP client manager
 from mcp_open_client.mcp_client import mcp_client_manager
 
+# Import conversation manager
+from mcp_open_client.ui.conversation_manager import conversation_manager
+from mcp_open_client.ui.chat_handlers import (
+    get_all_conversations, create_new_conversation, load_conversation,
+    delete_conversation, get_current_conversation_id
+)
+
 # Load the external CSS file from settings directory with cache busting
 ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
 
@@ -60,6 +67,125 @@ async def init_mcp_client():
             app.storage.user.mcp_initializing = False
 
 
+
+# Global variables
+conversations_container = None
+current_update_content_function = None
+
+def create_conversations_section():
+    """Create the conversations section in the sidebar"""
+    with ui.column().classes('w-full'):
+        ui.label('Conversations').classes('text-subtitle1 text-weight-medium q-mb-sm')
+        
+        # New conversation button
+        ui.button(
+            'New Chat',
+            icon='add',
+            on_click=lambda: create_new_conversation_and_refresh()
+        ).props('flat no-caps align-left full-width size=sm color=primary').classes('q-mb-sm')
+    
+        # Conversations list container - store reference globally for updates
+        global conversations_container
+        conversations_container = ui.column().classes('w-full')
+        populate_conversations_list(conversations_container)
+        
+        return conversations_container
+
+def create_new_conversation_and_refresh():
+    """Create a new conversation and refresh the UI"""
+    create_new_conversation()
+    refresh_conversations_list()
+    # Also refresh chat UI if callback is set
+    conversation_manager.refresh_chat_ui()
+    ui.notify('New conversation created', color='positive')
+
+def refresh_conversations_list():
+    """Refresh the conversations list in the sidebar"""
+    global conversations_container
+    if conversations_container:
+        populate_conversations_list(conversations_container)
+
+def populate_conversations_list(container):
+    """Populate the conversations list in the sidebar"""
+    if not container:
+        return
+        
+    container.clear()
+    
+    conversations = get_all_conversations()
+    current_id = get_current_conversation_id()
+    
+    with container:
+        if not conversations:
+            ui.label('No conversations yet').classes('text-caption text-grey-6 q-pa-sm')
+            return
+        
+        # Sort conversations by updated_at (most recent first)
+        sorted_conversations = sorted(
+            conversations.items(),
+            key=lambda x: x[1].get('updated_at', '0'),
+            reverse=True
+        )
+        
+        # Show only the 5 most recent conversations in sidebar
+        for conv_id, conv_data in sorted_conversations[:5]:
+            title = conv_data.get('title', f'Chat {conv_id[:8]}')
+            message_count = len(conv_data.get('messages', []))
+            
+            # Highlight current conversation
+            button_classes = 'drawer-btn text-left q-py-xs q-px-sm'
+            if conv_id == current_id:
+                button_classes += ' bg-blue-1 text-blue-8'
+            
+            with ui.row().classes('w-full items-center no-wrap'):
+                # Conversation button (takes most space)
+                conv_btn = ui.button(
+                    title,
+                    on_click=lambda cid=conv_id: load_conversation_and_refresh(cid)
+                ).props('flat no-caps align-left').classes(f'{button_classes} flex-1 text-caption')
+                conv_btn.style('min-width: 0; overflow: hidden; text-overflow: ellipsis;')
+                
+                # Delete button (small)
+                ui.button(
+                    icon='delete_outline',
+                    on_click=lambda cid=conv_id: delete_conversation_with_confirm(cid)
+                ).props('flat round size=xs color=grey-6').classes('q-ml-xs').style('min-width: 20px; width: 20px; height: 20px;')
+
+def load_conversation_and_refresh(conversation_id: str):
+    """Load a conversation and refresh the UI"""
+    load_conversation(conversation_id)
+    refresh_conversations_list()
+    # Also refresh chat UI if callback is set
+    conversation_manager.refresh_chat_ui()
+    # Switch to chat view automatically
+    global current_update_content_function
+    if current_update_content_function:
+        current_update_content_function('chat')
+    ui.notify(f'Loaded conversation', color='info')
+
+def delete_conversation_with_confirm(conversation_id: str):
+    """Delete a conversation with confirmation"""
+    def confirm_delete():
+        delete_conversation(conversation_id)
+        refresh_conversations_list()
+        # Also refresh chat UI if callback is set
+        conversation_manager.refresh_chat_ui()
+        ui.notify('Conversation deleted', color='warning')
+        dialog.close()
+    
+    def cancel_delete():
+        dialog.close()
+    
+    with ui.dialog() as dialog:
+        with ui.card().classes('q-pa-md'):
+            ui.label('Delete Conversation?').classes('text-h6 q-mb-md')
+            ui.label('This action cannot be undone.').classes('q-mb-md')
+            
+            with ui.row().classes('w-full justify-end gap-2'):
+                ui.button('Cancel', on_click=cancel_delete).props('flat')
+                ui.button('Delete', on_click=confirm_delete).props('color=red')
+    
+    dialog.open()
 
 def setup_ui():
     """Setup the UI components"""
@@ -124,6 +250,10 @@ def setup_ui():
             elif section == 'chat':
                 show_chat_content(content_container)
         
+        # Make update_content available globally
+        global current_update_content_function
+        current_update_content_function = update_content
+        
         with ui.header(elevated=True).classes('app-header'):
             with ui.row().classes('items-center full-width'):
                 with ui.row().classes('items-center'):
@@ -185,6 +315,10 @@ def setup_ui():
                     f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("chat")}'
                 )
             
+            # Conversations section
+            ui.separator().classes('q-my-md')
+            create_conversations_section()
+            
             ui.separator()
             with ui.row().classes('w-full items-center justify-between'):
                 ui.label('© 2025 MCP Open Client').classes('text-subtitle2')
@@ -209,7 +343,7 @@ setup_ui()
 ui.run(
     storage_secret="ultrasecretkeyboard",
     port=8081,
-    reload=True,
+    reload=False,
     dark=True,
     show_welcome_message=True,
     show=False

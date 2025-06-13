@@ -5,3 +5,4 @@
 \mcp_open_client.egg-info
 build/
 dist/
+.pytest_cache/
