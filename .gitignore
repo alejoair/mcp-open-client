@@ -1,4 +1,7 @@
 **__pycache__/
 .cline/
-.env/
+.venv/
 .nicegui/
+\mcp_open_client.egg-info
+build/
+dist/

@@ -1,0 +1,57 @@
+# OPCIÓN 1: Migrar completamente a pyproject.toml
+# Elimina setup.py y crea pyproject.toml:
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-open-client"
+version = "0.2.7"
+description = "MCP Open Client - A NiceGUI-based chat application for Claude"
+authors = [{name = "alejoair", email = "your.email@example.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "nicegui",
+    "openai",
+    "jsonschema",
+    "requests",
+    "fastmcp"
+]
+
+[project.optional-dependencies]
+dev = [
+    "types-requests",
+    "types-jsonschema",
+    "mypy",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/alejoair/mcp-open-client"
+"Bug Tracker" = "https://github.com/alejoair/mcp-open-client/issues"
+
+[project.scripts]
+mcp-open-client = "mcp_open_client.cli:main"  # ✅ CLI wrapper entry point
+
+[tool.setuptools.packages.find]
+include = ["mcp_open_client*"]
+
+[tool.setuptools.package-data]
+mcp_open_client = [
+    "settings/*.css",
+    "settings/*.json",
+    "ui/*.py",
+]
+
+# ============================================================================
+
+# OPCIÓN 2: Mantener setup.py (si tienes lógica custom como PostInstallCommand)
+# En tu caso, como tienes PostInstallCommand, es mejor mantener setup.py
+# pyproject.toml es mejor para proyectos simples sin lógica de instalación custom

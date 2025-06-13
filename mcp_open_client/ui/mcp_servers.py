@@ -3,10 +3,10 @@ import json
 import os
 import asyncio
 from typing import Dict, Any
-from mcp_client import mcp_client_manager
+from mcp_open_client.mcp_client import mcp_client_manager
 
 # Path to the MCP configuration file
-MCP_CONFIG_PATH = os.path.join('settings', 'mcp-config.json')
+MCP_CONFIG_PATH = os.path.join('mcp_open_client/settings', 'mcp-config.json')
 
 # Function to save configuration to file
 def save_config_to_file(config: Dict[str, Any]) -> bool:
