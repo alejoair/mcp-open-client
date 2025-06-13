@@ -115,16 +115,16 @@ def index():
     with ui.header(elevated=True).classes('app-header'):
         with ui.row().classes('items-center full-width'):
             with ui.row().classes('items-center'):
-                ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat').classes('q-mr-sm')
+                ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('q-mr-sm')
                 ui.label('MCP-Open-Client').classes('app-title text-h5')
             
             ui.space()
             
             with ui.row().classes('items-center'):
-                ui.button(icon='notifications').props('flat round').classes('q-mr-sm').tooltip('Notifications')
-                ui.button(icon='help_outline').props('flat round').classes('q-mr-sm').tooltip('Help')
-                ui.button(icon='dark_mode', on_click=lambda: ui.dark_mode().toggle()).props('flat round').classes('q-mr-sm').tooltip('Toggle dark/light mode')
-                ui.button(icon='account_circle').props('flat round').tooltip('User Account')
+                ui.button(icon='notifications').classes('q-mr-sm').tooltip('Notifications')
+                ui.button(icon='help_outline').classes('q-mr-sm').tooltip('Help')
+                ui.button(icon='dark_mode', on_click=lambda: ui.dark_mode().toggle()).classes('q-mr-sm').tooltip('Toggle dark/light mode')
+                ui.button(icon='account_circle').tooltip('User Account')
     
     with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
         ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
@@ -172,13 +172,12 @@ def index():
             ).classes(
                 f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("chat")}'
             )
-    
-    with ui.footer().classes(''):
+        
         with ui.row().classes('w-full items-center justify-between'):
             ui.label('© 2025 MCP Open Client').classes('text-subtitle2')
             with ui.row().classes('items-center'):
                 ui.button('Documentation', on_click=lambda: ui.open('https://docs.mcp-open-client.com')).props('flat dense size="sm"').classes('documentation-btn')
-
+  
     
     # Set home as the default content
     update_content('home')

@@ -1,110 +1,46 @@
 import asyncio
 import logging
-import time
 from typing import Dict, List, Optional, Union, Any
 import openai
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletion
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("APIClient")
 
 class APIClientError(Exception):
-    """Base exception class for APIClient errors"""
     pass
 
 class APIClient:
-    """
-    Client for interacting with OpenAI-compatible APIs.
-    
-    Features:
-    - Configurable base URL, API key, and model
-    - Methods for listing models and calling chat completions
-    - Robust error handling with detailed error messages
-    - Automatic retries with exponential backoff
-    - Comprehensive logging
-    - Async support for non-blocking operations
-    """
-    
     def __init__(
         self, 
-        base_url: str = "https://192.168.58.111:8123/v1", 
-        api_key: str = "", 
+        base_url: str = "http://192.168.58.101:8123",
+        api_key: str = "sisas", 
         model: str = "claude-3-5-sonnet",
         max_retries: int = 10,
         timeout: float = 60.0
     ):
-        """
-        Initialize the API client.
-        
-        Args:
-            base_url: Base URL of the API (default: OpenAI's API)
-            api_key: API key for authentication
-            model: Default model to use for completions
-            max_retries: Maximum number of retries for failed requests
-            timeout: Timeout for operations in seconds
-        """
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
         self.max_retries = max_retries
         self.timeout = timeout
         self._client = None
-        
-        # Initialize the client
         self._initialize_client()
-        
         logger.info(f"Initialized APIClient with base URL: {base_url}")
-    
+
     def _initialize_client(self):
-        """Initialize the OpenAI client with current settings"""
         self._client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
             max_retries=self.max_retries
         )
-    
-    async def close(self):
-        """Close the API client session"""
-        # The AsyncOpenAI client handles session cleanup automatically
-        # but we'll set it to None to be explicit
-        self._client = None
-        logger.info("Closed API client session")
-    
-    def set_base_url(self, base_url: str):
-        """Set the base URL for the API"""
-        self.base_url = base_url
-        self._initialize_client()
-        logger.info(f"Set base URL to: {base_url}")
-    
-    def set_api_key(self, api_key: str):
-        """Set the API key for authentication"""
-        self.api_key = api_key
-        self._initialize_client()
-        logger.info("Updated API key")
-    
-    def set_model(self, model: str):
-        """Set the default model for completions"""
-        self.model = model
-        logger.info(f"Set default model to: {model}")
-    
+        logger.debug(f"Client initialized with: base_url={self.base_url}, timeout={self.timeout}, max_retries={self.max_retries}")
+
     async def list_models(self) -> List[Dict[str, Any]]:
-        """
-        Get a list of available models from the API.
-        
-        Returns:
-            List of model objects with their properties
-            
-        Raises:
-            APIClientError: If the request fails
-        """
         try:
             logger.info("Fetching available models")
+            logger.debug(f"Sending request to: {self.base_url}/models")
             response = await self._client.models.list()
             models = response.data
             logger.info(f"Retrieved {len(models)} models")
@@ -117,7 +53,12 @@ class APIClient:
             error_msg = f"Unexpected error listing models: {str(e)}"
             logger.error(error_msg)
             raise APIClientError(error_msg) from e
-    
+
+    async def close(self):
+        # AsyncOpenAI doesn't have a close method, but we'll keep this for consistency
+        logger.info("Closing APIClient")
+        self._client = None
+
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
