@@ -4,7 +4,15 @@ from typing import Dict, List, Optional, Union, Any
 import openai
 from openai import AsyncOpenAI
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging with less verbosity
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Reduce verbosity of external libraries
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+
 logger = logging.getLogger("APIClient")
 
 class APIClientError(Exception):
@@ -35,12 +43,11 @@ class APIClient:
             timeout=self.timeout,
             max_retries=self.max_retries
         )
-        logger.debug(f"Client initialized with: base_url={self.base_url}, timeout={self.timeout}, max_retries={self.max_retries}")
+        # Removed debug log for cleaner output
 
     async def list_models(self) -> List[Dict[str, Any]]:
         try:
             logger.info("Fetching available models")
-            logger.debug(f"Sending request to: {self.base_url}/models")
             response = await self._client.models.list()
             models = response.data
             logger.info(f"Retrieved {len(models)} models")

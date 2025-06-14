@@ -1,12 +1,19 @@
 {
   "mcpServers": {
+    "test-server": {
+      "command": "python",
+      "args": [
+        "test_mcp_server.py"
+      ],
+      "disabled": false
+    },
     "Context7": {
       "command": "npx",
       "args": [
         "-y",
         "@upstash/context7-mcp"
       ],
-      "disabled": false
+      "disabled": true
     },
     "sequential-thinking": {
       "command": "python",
@@ -20,7 +27,7 @@
       "args": [
         "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-requests\\src\\server.py"
       ],
-      "disabled": true
+      "disabled": false
     },
     "dfsafd": {
       "disabled": true,

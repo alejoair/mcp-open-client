@@ -1,4 +1,5 @@
 import uuid
+import json
 from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
@@ -50,7 +51,7 @@ def get_messages() -> List[Dict[str, Any]]:
         return conversations[current_conversation_id]['messages'].copy()
     return []
 
-def add_message(role: str, content: str) -> None:
+def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any]]] = None, tool_call_id: Optional[str] = None) -> None:
     """Add a message to the current conversation"""
     if not current_conversation_id:
         create_new_conversation()
@@ -62,6 +63,15 @@ def add_message(role: str, content: str) -> None:
             'content': content,
             'timestamp': str(uuid.uuid1().time)
         }
+        
+        # Add tool calls if present (for assistant messages)
+        if tool_calls:
+            message['tool_calls'] = tool_calls
+            
+        # Add tool call ID if present (for tool messages)
+        if tool_call_id:
+            message['tool_call_id'] = tool_call_id
+        
         conversations[current_conversation_id]['messages'].append(message)
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
@@ -123,6 +133,18 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
     except Exception as e:
         print(f"Scroll setup error (non-critical): {e}")
 
+def render_tool_call_and_result(chat_container, tool_call, tool_result):
+    """Render tool call and result in the UI"""
+    with chat_container:
+        with ui.card().classes('w-full mb-2 bg-yellow-100'):
+            ui.label('Tool Call:').classes('font-bold')
+            ui.markdown(f"**Name:** {tool_call['function']['name']}")
+            ui.markdown(f"**Arguments:**\n```json\n{tool_call['function']['arguments']}\n```")
+        
+        with ui.card().classes('w-full mb-2 bg-green-100'):
+            ui.label('Tool Result:').classes('font-bold')
+            ui.markdown(f"```json\n{json.dumps(tool_result, indent=2)}\n```")
+
 async def send_message_to_mcp(message: str, server_name: str, chat_container, message_input):
     """Send message to MCP server and handle response"""
     from mcp_open_client.mcp_client import mcp_client_manager
@@ -146,19 +168,59 @@ async def send_message_to_mcp(message: str, server_name: str, chat_container, me
         tools = await mcp_client_manager.list_tools()
         resources = await mcp_client_manager.list_resources()
         
-        # For now, just echo the message with available tools info
-        # In a real implementation, you would send this to an LLM
-        response_content = f"Received: {message}\n\nAvailable tools: {len(tools)}\nAvailable resources: {len(resources)}"
+        # Prepare the context for the LLM
+        context = {
+            "message": message,
+            "tools": tools,
+            "resources": resources
+        }
+        
+        # Send the context to the LLM
+        try:
+            llm_response = await mcp_client_manager.generate_response(context)
+            
+            # Check if the LLM response contains tool calls
+            if isinstance(llm_response, dict) and 'tool_calls' in llm_response:
+                for tool_call in llm_response['tool_calls']:
+                    tool_name = tool_call['function']['name']
+                    tool_args = json.loads(tool_call['function']['arguments'])
+                    
+                    # Execute the tool call
+                    tool_result = await mcp_client_manager.call_tool(tool_name, tool_args)
+                    
+                    # Add tool call to conversation
+                    add_message('assistant', f"Calling tool: {tool_name}", tool_calls=[tool_call])
+                    
+                    # Add tool result to conversation
+                    add_message('tool', json.dumps(tool_result, indent=2), tool_call_id=tool_call['id'])
+                    
+                    # Render tool call and result in UI
+                    render_tool_call_and_result(chat_container, tool_call, tool_result)
+                
+                # Add final assistant response to conversation
+                if 'content' in llm_response:
+                    add_message('assistant', llm_response['content'])
+                    with chat_container:
+                        ui.markdown(f"**AI:** {llm_response['content']}").classes('bg-blue-100 p-2 rounded-lg mb-2')
+            else:
+                # Add assistant response to conversation
+                add_message('assistant', llm_response)
+                with chat_container:
+                    ui.markdown(f"**AI:** {llm_response}").classes('bg-blue-100 p-2 rounded-lg mb-2')
+        except Exception as llm_error:
+            error_message = f'Error generating LLM response: {str(llm_error)}'
+            add_message('assistant', error_message)
+            with chat_container:
+                ui.markdown(f"**Error:** {error_message}").classes('bg-red-100 p-2 rounded-lg mb-2')
         
         # Remove spinner
         spinner_card.delete()
         
-        # Add assistant response to conversation
-        add_message('assistant', response_content)
-        
-        # The UI will be refreshed by the conversation manager
+        # Scroll to bottom after adding new content
+        await safe_scroll_to_bottom(chat_container)
         
     except Exception as e:
+        print(f"Error in send_message_to_mcp: {e}")
         # Remove spinner if error occurs
         if 'spinner_card' in locals():
             spinner_card.delete()
@@ -203,13 +265,70 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
             # Convert to API format
             api_messages = []
             for msg in conversation_messages:
-                api_messages.append({
+                api_msg = {
                     "role": msg["role"],
                     "content": msg["content"]
-                })
+                }
+                
+                # Include tool_calls for assistant messages
+                if msg["role"] == "assistant" and "tool_calls" in msg:
+                    api_msg["tool_calls"] = msg["tool_calls"]
+                
+                # Include tool_call_id for tool messages
+                if msg["role"] == "tool" and "tool_call_id" in msg:
+                    api_msg["tool_call_id"] = msg["tool_call_id"]
+                
+                api_messages.append(api_msg)
             
-            response = await api_client.chat_completion(api_messages)
-            bot_response = response['choices'][0]['message']['content']
+            # Get available MCP tools for tool calling
+            from .handle_tool_call import get_available_tools, is_tool_call_response, extract_tool_calls, handle_tool_call
+            available_tools = await get_available_tools()
+            
+            # Call LLM with tools if available
+            if available_tools:
+                response = await api_client.chat_completion(api_messages, tools=available_tools)
+            else:
+                response = await api_client.chat_completion(api_messages)
+            
+            # Check if response contains tool calls
+            if is_tool_call_response(response):
+                # Handle tool calls
+                tool_calls = extract_tool_calls(response)
+                
+                # Add the assistant message with tool calls to conversation
+                assistant_message = response['choices'][0]['message']
+                add_message('assistant', assistant_message.get('content', ''), tool_calls=assistant_message.get('tool_calls'))
+                
+                # Process each tool call
+                tool_results = []
+                for tool_call in tool_calls:
+                    tool_result = await handle_tool_call(tool_call)
+                    tool_results.append(tool_result)
+                    
+                    # Add tool result to conversation UI
+                    add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                
+                # Update API messages with assistant message including tool calls
+                api_messages.append({
+                    "role": "assistant",
+                    "content": assistant_message.get('content'),
+                    "tool_calls": assistant_message.get('tool_calls')
+                })
+                
+                # Add tool results to API messages
+                for tool_result in tool_results:
+                    api_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_result['tool_call_id'],
+                        "content": tool_result['content']
+                    })
+                
+                # Get final response from LLM after tool execution
+                final_response = await api_client.chat_completion(api_messages, tools=available_tools)
+                bot_response = final_response['choices'][0]['message']['content']
+            else:
+                # Regular response without tool calls
+                bot_response = response['choices'][0]['message']['content']
             
             # Remove spinner
             spinner.delete()
