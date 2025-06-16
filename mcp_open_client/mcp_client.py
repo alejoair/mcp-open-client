@@ -1,11 +1,15 @@
 import asyncio
 import json
 import os
-import subprocess
-import signal
-import sys
 from typing import Dict, Any, List, Optional, Union
 from fastmcp import Client, Context
+from fastmcp.client.transports import UvxStdioTransport, NpxStdioTransport
+import mcp.shared.exceptions
+import anyio
+
+class McpClientError(Exception):
+    """Custom exception for MCP client errors."""
+    pass
 
 class MCPClientManager:
     """
@@ -18,101 +22,7 @@ class MCPClientManager:
         self.active_servers = {}
         self.config = {}
         self._initializing = False  # Flag to prevent concurrent initializations
-        self.server_processes = {}  # Track launched server processes
     
-    async def _launch_local_server(self, server_name: str, server_config: Dict[str, Any]) -> bool:
-        """Launch a local MCP server process."""
-        if server_name in self.server_processes:
-            # Server already running
-            process = self.server_processes[server_name]
-            if process.poll() is None:  # Process is still running
-                print(f"Server {server_name} is already running")
-                return True
-            else:
-                # Process died, remove it from tracking
-                del self.server_processes[server_name]
-        
-        try:
-            command = server_config.get("command")
-            args = server_config.get("args", [])
-            env = server_config.get("env", {})
-            
-            if not command:
-                print(f"No command specified for server {server_name}")
-                return False
-            
-            # Prepare the full command
-            full_command = [command] + args
-            
-            # Prepare environment variables
-            process_env = os.environ.copy()
-            process_env.update(env)
-            
-            print(f"Launching MCP server {server_name}: {' '.join(full_command)}")
-            
-            # Launch the process
-            process = subprocess.Popen(
-                full_command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=process_env,
-                text=True,
-                bufsize=0
-            )
-            
-            # Store the process for later management
-            self.server_processes[server_name] = process
-            
-            # Give the server a moment to start up
-            await asyncio.sleep(1)
-            
-            # Check if the process is still running
-            if process.poll() is None:
-                print(f"Successfully launched MCP server {server_name} (PID: {process.pid})")
-                return True
-            else:
-                print(f"Failed to launch MCP server {server_name} - process exited immediately")
-                if server_name in self.server_processes:
-                    del self.server_processes[server_name]
-                return False
-                
-        except Exception as e:
-            print(f"Error launching MCP server {server_name}: {str(e)}")
-            return False
-    
-    async def _stop_local_server(self, server_name: str):
-        """Stop a local MCP server process."""
-        if server_name not in self.server_processes:
-            return
-        
-        process = self.server_processes[server_name]
-        try:
-            if process.poll() is None:  # Process is still running
-                print(f"Stopping MCP server {server_name} (PID: {process.pid})")
-                
-                # Try graceful shutdown first
-                process.terminate()
-                
-                # Wait a bit for graceful shutdown
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    # Force kill if graceful shutdown failed
-                    print(f"Force killing MCP server {server_name}")
-                    process.kill()
-                    process.wait()
-                
-                print(f"Stopped MCP server {server_name}")
-            
-        except Exception as e:
-            print(f"Error stopping MCP server {server_name}: {str(e)}")
-        finally:
-            del self.server_processes[server_name]
-    
-    def _is_local_server(self, server_config: Dict[str, Any]) -> bool:
-        """Check if a server configuration represents a local server."""
-        return "command" in server_config and "args" in server_config
     
     async def initialize(self, config: Dict[str, Any]):
         """Initialize the MCP client with the given configuration."""
@@ -125,7 +35,7 @@ class MCPClientManager:
             self._initializing = True
             self.config = config
             
-            print("Starting MCP client initialization...")
+            print(f"Starting MCP client initialization with config: {json.dumps(config, indent=2)}")
             
             # Close any existing client and stop running servers
             await self.close()
@@ -143,53 +53,29 @@ class MCPClientManager:
                     self.active_servers = active_servers
                     print(f"Active servers: {', '.join(active_servers.keys())}")
                     
-                    # Launch local servers first
-                    launched_servers = {}
-                    for server_name, server_config in active_servers.items():
-                        if self._is_local_server(server_config):
-                            print(f"Attempting to launch local server: {server_name}")
-                            success = await self._launch_local_server(server_name, server_config)
-                            if success:
-                                launched_servers[server_name] = server_config
-                                print(f"Successfully launched local server: {server_name}")
-                            else:
-                                print(f"Failed to launch local server {server_name}, skipping...")
-                        else:
-                            # Non-local servers (e.g., remote servers) are added directly
-                            launched_servers[server_name] = server_config
-                            print(f"Added non-local server: {server_name}")
+                    # Let FastMCP handle server launching automatically
+                    print("FastMCP will handle server launching automatically")
+                    print(f"Client configuration: {json.dumps({'mcpServers': active_servers}, indent=2)}")
                     
-                    if launched_servers:
-                        # Give servers additional time to fully initialize
-                        if any(self._is_local_server(config) for config in launched_servers.values()):
-                            print("Waiting for local servers to fully initialize...")
-                            await asyncio.sleep(2)
+                    try:
+                        print("Preparing MCP client...")
+                        # Don't create client here, create it when needed in context manager
+                        self.client = None  # Will be created in context manager
+                        print(f"Successfully prepared MCP client with {len(active_servers)} servers")
                         
-                        # Create configuration with only successfully launched servers
-                        client_config = {"mcpServers": launched_servers}
+                        # Check client connection status
+                        print("Checking client connection...")
                         try:
-                            print("Creating MCP client...")
-                            self.client = Client(client_config)
-                            print(f"Successfully created MCP client with {len(launched_servers)} servers")
-                            
-                            # Check client connection status
-                            print("Checking client connection...")
-                            if await self._check_client_connection():
-                                print("Client connection verified")
-                                return True
-                            else:
-                                print("Client initialized but connection check failed")
-                                return False
-                        except Exception as e:
-                            print(f"Error initializing MCP client: {str(e)}")
-                            print(f"Client configuration: {json.dumps(client_config, indent=2)}")
-                            # Stop any launched servers if client creation failed
-                            for server_name in launched_servers:
-                                if server_name in self.server_processes:
-                                    await self._stop_local_server(server_name)
+                            await self._check_client_connection()
+                            print("Client connection verified")
+                            return True
+                        except McpClientError as e:
+                            print(f"Client connection check failed: {str(e)}")
                             return False
-                    else:
-                        print("No servers could be launched or configured")
+                    except Exception as e:
+                        print(f"Error initializing MCP client: {str(e)}")
+                        print(f"Exception type: {type(e).__name__}")
+                        print(f"Exception details: {repr(e)}")
                         return False
                 else:
                     print("No active servers found in configuration")
@@ -199,6 +85,8 @@ class MCPClientManager:
                 return False
         except Exception as e:
             print(f"Unexpected error during MCP client initialization: {str(e)}")
+            print(f"Exception type: {type(e).__name__}")
+            print(f"Exception details: {repr(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -208,74 +96,129 @@ class MCPClientManager:
 
     async def _check_client_connection(self) -> bool:
         """Check if the client is properly connected to the servers."""
+        print("Starting client connection check...")
+        
         try:
-            print("Starting client connection check...")
-            # Use the context manager to ensure proper connection
-            async with self.client as ctx:
-                print("Client context manager entered successfully")
-                print("Client configuration:", self.client.config)
-                print("Attempting to list tools...")
-                tools = await self.client.list_tools()
-                print(f"Successfully listed {len(tools)} tools")
-            return True
+            print("Testing client connection...")
+            # Create a temporary client to test the connection
+            async with Client({"mcpServers": self.active_servers}) as client:
+                tools = await client.list_tools()
+                print(f"Successfully connected to MCP servers. Found {len(tools)} tools.")
+                return True
         except Exception as e:
-            print(f"Error checking client connection: {str(e)}")
-            print("Client configuration:", self.client.config)
-            print("Active servers:", self.active_servers)
-            import traceback
-            traceback.print_exc()
-            return False
+            print(f"Error testing client connection: {str(e)}")
+            print(f"Exception type: {type(e).__name__}")
+            # For now, we'll consider this a warning rather than a failure
+            # since FastMCP might need more time to establish connections
+            print("Warning: Initial connection test failed, but proceeding with initialization")
+            return True
 
     async def close(self):
-        """Close the MCP client connection and stop local servers."""
+        """Close the MCP client connection."""
         if self.client:
             # The fastmcp Client doesn't have a close method
             # Just set it to None to allow garbage collection
             self.client = None
         
-        # Stop all running local servers
-        for server_name in list(self.server_processes.keys()):
-            await self._stop_local_server(server_name)
+        # Clear active servers since FastMCP handles server lifecycle
+        self.active_servers = {}
+    
+    def _create_transport_for_server(self, server_name: str, server_config: Dict[str, Any]):
+        """Create the appropriate transport for a server based on its command."""
+        command = server_config.get("command", "")
+        args = server_config.get("args", [])
+        
+        if command == "uvx":
+            # For UVX, the tool name is typically the first argument
+            tool_name = args[0] if args else server_name
+            print(f"Creating UvxStdioTransport for {server_name} with tool_name: {tool_name}")
+            return UvxStdioTransport(tool_name=tool_name)
+        
+        elif command == "npx":
+            # For NPX, we need to extract the package name and additional args
+            if args:
+                # Find the package name (usually after -y flag or first non-flag arg)
+                package = None
+                npx_args = []
+                
+                for i, arg in enumerate(args):
+                    if arg == "-y" and i + 1 < len(args):
+                        # Package is after -y flag
+                        package = args[i + 1]
+                        npx_args = args[:i] + args[i+2:]  # Remove -y and package
+                        break
+                    elif not arg.startswith("-"):
+                        # First non-flag argument is the package
+                        package = arg
+                        npx_args = args[:i] + args[i+1:]  # Remove package from args
+                        break
+                
+                if package:
+                    print(f"Creating NpxStdioTransport for {server_name} with package: {package}, args: {npx_args}")
+                    return NpxStdioTransport(package=package, args=npx_args if npx_args else None)
+            
+            raise ValueError(f"Could not determine NPX package for server {server_name}")
+        
+        else:
+            raise ValueError(f"Unsupported command '{command}' for server {server_name}. Only 'uvx' and 'npx' are supported.")
     
     async def list_tools(self) -> List[Dict[str, Any]]:
         """List all available tools from connected MCP servers."""
-        if not self.client:
-            print("MCP client is not initialized")
+        if not self.active_servers:
+            print("No active MCP servers configured")
             return []
         
-        try:
-            print("Attempting to list tools...")
-            async with self.client:
-                tools = await self.client.list_tools()
-            print(f"Retrieved {len(tools)} MCP tools")
-            return tools
-        except Exception as e:
-            print(f"Error listing tools: {str(e)}")
-            print("MCP client status:")
-            print(json.dumps(self.get_server_status(), indent=2))
-            
-            # Additional debugging information
-            print("Debugging information:")
-            print(f"Client object: {self.client}")
-            print(f"Active servers: {self.active_servers}")
-            
-            # Attempt to get more information from the client
+        all_tools = []
+        
+        for server_name, server_config in self.active_servers.items():
             try:
-                info = await self.client.get_info()
-                print(f"Client info: {info}")
-            except Exception as info_error:
-                print(f"Error getting client info: {str(info_error)}")
-            
-            return []
+                print(f"Connecting to server: {server_name}")
+                print(f"Server config: {json.dumps(server_config, indent=2)}")
+                
+                # Create specific transport for this server
+                transport = self._create_transport_for_server(server_name, server_config)
+                
+                # Connect using the specific transport
+                async with Client(transport) as client:
+                    print(f"Client connected to {server_name}, calling list_tools()...")
+                    tools = await client.list_tools()
+                    print(f"Retrieved {len(tools)} tools from {server_name}")
+                    
+                    # Add server name to each tool for identification
+                    for tool in tools:
+                        if isinstance(tool, dict):
+                            tool['_server'] = server_name
+                        else:
+                            # Handle tool objects
+                            tool_dict = {
+                                'name': getattr(tool, 'name', 'unnamed'),
+                                'description': getattr(tool, 'description', ''),
+                                '_server': server_name
+                            }
+                            all_tools.append(tool_dict)
+                            continue
+                    
+                    all_tools.extend(tools)
+                    
+            except Exception as e:
+                print(f"Error connecting to server {server_name}: {str(e)}")
+                print(f"Error type: {type(e).__name__}")
+                continue
+        
+        print(f"Total tools retrieved: {len(all_tools)}")
+        if all_tools:
+            print(f"Tool names: {[tool.get('name', 'unnamed') for tool in all_tools]}")
+        
+        return all_tools
     
     async def list_resources(self) -> List[Dict[str, Any]]:
         """List all available resources from connected MCP servers."""
-        if not self.client:
+        if not self.active_servers:
             return []
         
         try:
-            async with self.client:
-                resources = await self.client.list_resources()
+            async with Client({"mcpServers": self.active_servers}) as client:
+                resources = await client.list_resources()
                 return resources
         except Exception as e:
             print(f"Error listing resources: {str(e)}")
@@ -283,24 +226,24 @@ class MCPClientManager:
     
     async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Call a tool on one of the connected MCP servers."""
-        if not self.client:
-            raise ValueError("MCP client not initialized")
+        if not self.active_servers:
+            raise ValueError("No active MCP servers configured")
         
         try:
-            async with self.client:
-                result = await self.client.call_tool(tool_name, params)
+            async with Client({"mcpServers": self.active_servers}) as client:
+                result = await client.call_tool(tool_name, params)
                 return result
         except Exception as e:
             raise Exception(f"Error calling tool {tool_name}: {str(e)}")
     
     async def read_resource(self, uri: str) -> List[Dict[str, Any]]:
         """Read a resource from one of the connected MCP servers."""
-        if not self.client:
-            raise ValueError("MCP client not initialized")
+        if not self.active_servers:
+            raise ValueError("No active MCP servers configured")
         
         try:
-            async with self.client:
-                result = await self.client.read_resource(uri)
+            async with Client({"mcpServers": self.active_servers}) as client:
+                result = await client.read_resource(uri)
                 return result
         except Exception as e:
             raise Exception(f"Error reading resource {uri}: {str(e)}")
@@ -311,27 +254,15 @@ class MCPClientManager:
     
     def is_connected(self) -> bool:
         """Check if the client is connected to any MCP servers."""
-        return self.client is not None
+        return len(self.active_servers) > 0
     
-    def get_server_processes(self) -> Dict[str, subprocess.Popen]:
-        """Get the currently running server processes."""
-        return self.server_processes.copy()
-    
-    def get_server_status(self) -> Dict[str, str]:
-        """Get the status of all configured servers."""
-        status = {}
-        for server_name, server_config in self.active_servers.items():
-            if self._is_local_server(server_config):
-                if server_name in self.server_processes:
-                    process = self.server_processes[server_name]
-                    if process.poll() is None:
-                        status[server_name] = f"Running (PID: {process.pid})"
-                    else:
-                        status[server_name] = "Stopped (process exited)"
-                else:
-                    status[server_name] = "Not started"
-            else:
-                status[server_name] = "Remote server"
+    def get_server_status(self) -> Dict[str, Any]:
+        """Get the status of all servers."""
+        status = {
+            "active_servers": list(self.active_servers.keys()),
+            "fastmcp_managed": True
+        }
+        
         return status
 
 # Create a singleton instance

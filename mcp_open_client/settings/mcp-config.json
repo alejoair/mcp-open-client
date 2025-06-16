@@ -1,12 +1,5 @@
 {
   "mcpServers": {
-    "test-server": {
-      "command": "python",
-      "args": [
-        "test_mcp_server.py"
-      ],
-      "disabled": false
-    },
     "Context7": {
       "command": "npx",
       "args": [
@@ -15,28 +8,14 @@
       ],
       "disabled": true
     },
-    "sequential-thinking": {
-      "command": "python",
-      "args": [
-        "C:\\Users\\Usuario\\Desktop\\mcp\\sequential-thinking\\sequentialthinking.py"
-      ],
-      "disabled": true
-    },
     "mcp-requests": {
-      "command": "python",
+      "disabled": false,
+      "command": "uvx",
       "args": [
-        "C:\\Users\\Usuario\\Desktop\\mcp\\mcp-requests\\src\\server.py"
-      ],
-      "disabled": false
-    },
-    "dfsafd": {
-      "disabled": true,
-      "command": "adsfasdf",
-      "args": [
-        "adfadf"
+        "mcp-requests"
       ],
       "env": {
-        "asdfadsf": "2312423"
+        "key": "val"
       }
     }
   }

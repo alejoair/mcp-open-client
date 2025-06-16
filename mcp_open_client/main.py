@@ -51,7 +51,11 @@ async def init_mcp_client():
         app.storage.user.mcp_initializing = True
         try:
             config = app.storage.user.get('mcp-config', {})
-            print(f"Initializing MCP client with config: {config}")
+            print(f"Initializing MCP client with config: {json.dumps(config, indent=2)}")
+            
+            if not config or not config.get('mcpServers'):
+                raise ValueError("Invalid or empty MCP configuration")
+            
             success = await mcp_client_manager.initialize(config)
             
             # We need to use a safe way to notify from background tasks
@@ -59,15 +63,23 @@ async def init_mcp_client():
                 active_servers = mcp_client_manager.get_active_servers()
                 server_count = len(active_servers)
                 print(f"Successfully connected to {server_count} MCP servers")
+                print(f"Active servers: {', '.join(active_servers.keys())}")
                 # Use app.storage to communicate with the UI
                 app.storage.user['mcp_status'] = f"Connected to {server_count} MCP servers"
                 app.storage.user['mcp_status_color'] = 'positive'
             else:
                 print("Failed to connect to any MCP servers")
+                print("MCP client status:", mcp_client_manager.get_server_status())
                 app.storage.user['mcp_status'] = "No active MCP servers found"
                 app.storage.user['mcp_status_color'] = 'warning'
+        except ValueError as ve:
+            print(f"Configuration error: {str(ve)}")
+            app.storage.user['mcp_status'] = f"Configuration error: {str(ve)}"
+            app.storage.user['mcp_status_color'] = 'negative'
         except Exception as e:
             print(f"Error initializing MCP client: {str(e)}")
+            print(f"Exception type: {type(e).__name__}")
+            print(f"Exception details: {repr(e)}")
             app.storage.user['mcp_status'] = f"Error: {str(e)}"
             app.storage.user['mcp_status_color'] = 'negative'
         finally:

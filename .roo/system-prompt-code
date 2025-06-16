@@ -26,12 +26,6 @@ Get clarification from user
 </follow_up>
 </ask_followup_question>
 
-new_task
-Define task to perform, you should complete your current task before creating a new one, this is very important, work only on a task at a time.
-<new_task>
-<mode>code(required)</mode>
-<message>Implement a new feature for the application. (required)</message>
-</new_task>
 
 list_files
 List directory contents
