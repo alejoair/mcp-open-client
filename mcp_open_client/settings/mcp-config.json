@@ -11,7 +11,7 @@
       },
       "transport": "stdio"
     },
-    "code-editor": {
+    "mcp-code-editor": {
       "disabled": false,
       "command": "uvx",
       "args": [
