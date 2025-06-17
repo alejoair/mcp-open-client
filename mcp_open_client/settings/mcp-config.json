@@ -1,14 +1,5 @@
 {
   "mcpServers": {
-    "Context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp"
-      ],
-      "transport": "stdio",
-      "disabled": false
-    },
     "mcp-requests": {
       "disabled": false,
       "command": "uvx",
@@ -19,6 +10,13 @@
         "key": "val"
       },
       "transport": "stdio"
+    },
+    "code-editor": {
+      "disabled": false,
+      "command": "uvx",
+      "args": [
+        "mcp-code-editor"
+      ]
     }
   }
 }
