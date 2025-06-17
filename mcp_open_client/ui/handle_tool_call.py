@@ -54,7 +54,26 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         try:
             result = await mcp_client_manager.call_tool(tool_name, arguments)
             
-            # Format the result for the LLM
+            # Check if the result contains an error (from MCP client error handling)
+            if result and isinstance(result, dict) and 'error' in result:
+                # This is an error returned by the MCP client
+                error_msg = result['error']
+                operation_info = result.get('operation', {})
+                
+                # Create detailed error message for the LLM
+                detailed_error = f"MCP Tool Error: {error_msg}"
+                if operation_info:
+                    detailed_error += f"\nTool: {operation_info.get('name', tool_name)}"
+                    detailed_error += f"\nArguments: {operation_info.get('params', arguments)}"
+                
+                logger.error(f"MCP tool call failed: {tool_name} - {error_msg}")
+                return {
+                    "tool_call_id": tool_call_id,
+                    "role": "tool",
+                    "content": detailed_error
+                }
+            
+            # Format the successful result for the LLM
             if result:
                 # MCP returns a list of content items, we'll join them
                 content_parts = []
@@ -83,7 +102,7 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
-                "content": f"Error: {error_msg}"
+                "content": f"Error: {error_msg}\nTool: {tool_name}\nArguments: {arguments}"
             }
             
     except Exception as e:

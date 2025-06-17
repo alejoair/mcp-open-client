@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-open-client"
-version = "0.2.10"
+version = "0.3.3"
 description = "MCP Open Client - A NiceGUI-based chat application for Claude"
 authors = [{name = "alejoair", email = "your.email@example.com"}]
 license = {text = "MIT"}
@@ -23,7 +23,8 @@ dependencies = [
     "openai",
     "jsonschema",
     "requests",
-    "fastmcp"
+    "fastmcp",
+    "uv"
 ]
 
 [project.optional-dependencies]

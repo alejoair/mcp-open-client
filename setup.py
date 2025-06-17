@@ -24,7 +24,7 @@ class PostInstallCommand(install):
 
 setup(
     name="mcp-open-client",
-    version="0.3.0",
+    version="0.3.3",
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
@@ -32,7 +32,8 @@ setup(
         "openai",
         "jsonschema",
         "requests",
-        "fastmcp"
+        "fastmcp>=2.8.1",
+        "uv"
     ],
     entry_points={
         "console_scripts": [

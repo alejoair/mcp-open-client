@@ -1,11 +1,14 @@
 import asyncio
 import json
 import os
-from typing import Dict, Any, List, Optional, Union
-from fastmcp import Client, Context
-from fastmcp.client.transports import UvxStdioTransport, NpxStdioTransport
-import mcp.shared.exceptions
-import anyio
+from typing import Dict, Any, List, Optional, Union, Callable
+from fastmcp import Client
+from fastmcp.exceptions import McpError, ClientError
+import mcp.types
+import traceback
+
+# Type alias for progress handler
+ProgressHandler = Callable[[float, str], None]
 
 class McpClientError(Exception):
     """Custom exception for MCP client errors."""
@@ -14,7 +17,7 @@ class McpClientError(Exception):
 class MCPClientManager:
     """
     Manager for MCP clients that handles connections to multiple MCP servers
-    based on the configuration in app.storage.user['mcp-config'].
+    based on the configuration. Follows FastMCP best practices from reporte.md.
     """
     
     def __init__(self):
@@ -23,10 +26,9 @@ class MCPClientManager:
         self.config = {}
         self._initializing = False  # Flag to prevent concurrent initializations
     
-    
-    async def initialize(self, config: Dict[str, Any]):
+    async def initialize(self, config: Dict[str, Any]) -> bool:
         """Initialize the MCP client with the given configuration."""
-        # Prevent concurrent initializations to avoid infinite loops
+        # Prevent concurrent initializations
         if self._initializing:
             print("MCP client initialization already in progress, skipping...")
             return False
@@ -37,45 +39,36 @@ class MCPClientManager:
             
             print(f"Starting MCP client initialization with config: {json.dumps(config, indent=2)}")
             
-            # Close any existing client and stop running servers
-            await self.close()
-            
             # Create a new client with the current configuration
             if "mcpServers" in config and config["mcpServers"]:
-                # Filter out disabled servers
-                active_servers = {
-                    name: server_config
-                    for name, server_config in config["mcpServers"].items()
-                    if not server_config.get("disabled", False)
-                }
+                # Filter out disabled servers and remove 'disabled' field from server configs
+                active_servers = {}
+                for name, server_config in config["mcpServers"].items():
+                    if not server_config.get("disabled", False):
+                        # Create a clean copy without the 'disabled' field
+                        clean_config = {k: v for k, v in server_config.items() if k != "disabled"}
+                        active_servers[name] = clean_config
                 
                 if active_servers:
                     self.active_servers = active_servers
                     print(f"Active servers: {', '.join(active_servers.keys())}")
                     
-                    # Let FastMCP handle server launching automatically
-                    print("FastMCP will handle server launching automatically")
-                    print(f"Client configuration: {json.dumps({'mcpServers': active_servers}, indent=2)}")
+                    # Use FastMCP's standard MCP configuration format
+                    mcp_config = {"mcpServers": active_servers}
+                    print(f"Creating FastMCP client with config: {json.dumps(mcp_config, indent=2)}")
                     
                     try:
-                        print("Preparing MCP client...")
-                        # Don't create client here, create it when needed in context manager
-                        self.client = None  # Will be created in context manager
-                        print(f"Successfully prepared MCP client with {len(active_servers)} servers")
+                        # Create the client - FastMCP handles all transport logic automatically
+                        # FastMCP 2.8.1+ has fixed STDIO transport issues
+                        self.client = Client(mcp_config)
+                        print(f"Successfully created MCP client with {len(active_servers)} servers")
                         
-                        # Check client connection status
-                        print("Checking client connection...")
-                        try:
-                            await self._check_client_connection()
-                            print("Client connection verified")
-                            return True
-                        except McpClientError as e:
-                            print(f"Client connection check failed: {str(e)}")
-                            return False
+                        return True
+                        
                     except Exception as e:
-                        print(f"Error initializing MCP client: {str(e)}")
+                        print(f"Error creating MCP client: {str(e)}")
                         print(f"Exception type: {type(e).__name__}")
-                        print(f"Exception details: {repr(e)}")
+                        traceback.print_exc()
                         return False
                 else:
                     print("No active servers found in configuration")
@@ -86,184 +79,188 @@ class MCPClientManager:
         except Exception as e:
             print(f"Unexpected error during MCP client initialization: {str(e)}")
             print(f"Exception type: {type(e).__name__}")
-            print(f"Exception details: {repr(e)}")
-            import traceback
             traceback.print_exc()
             return False
         finally:
-            self._initializing = False  # Reset the flag when done
+            self._initializing = False
             print("MCP client initialization process completed")
 
-    async def _check_client_connection(self) -> bool:
-        """Check if the client is properly connected to the servers."""
-        print("Starting client connection check...")
-        
-        try:
-            print("Testing client connection...")
-            # Create a temporary client to test the connection
-            async with Client({"mcpServers": self.active_servers}) as client:
-                tools = await client.list_tools()
-                print(f"Successfully connected to MCP servers. Found {len(tools)} tools.")
-                return True
-        except Exception as e:
-            print(f"Error testing client connection: {str(e)}")
-            print(f"Exception type: {type(e).__name__}")
-            # For now, we'll consider this a warning rather than a failure
-            # since FastMCP might need more time to establish connections
-            print("Warning: Initial connection test failed, but proceeding with initialization")
-            return True
+    def is_initialized(self) -> bool:
+        """Check if the client is initialized."""
+        return self.client is not None
 
-    async def close(self):
-        """Close the MCP client connection."""
-        if self.client:
-            # The fastmcp Client doesn't have a close method
-            # Just set it to None to allow garbage collection
-            self.client = None
-        
-        # Clear active servers since FastMCP handles server lifecycle
-        self.active_servers = {}
-    
-    def _create_transport_for_server(self, server_name: str, server_config: Dict[str, Any]):
-        """Create the appropriate transport for a server based on its command."""
-        command = server_config.get("command", "")
-        args = server_config.get("args", [])
-        
-        if command == "uvx":
-            # For UVX, the tool name is typically the first argument
-            tool_name = args[0] if args else server_name
-            print(f"Creating UvxStdioTransport for {server_name} with tool_name: {tool_name}")
-            return UvxStdioTransport(tool_name=tool_name)
-        
-        elif command == "npx":
-            # For NPX, we need to extract the package name and additional args
-            if args:
-                # Find the package name (usually after -y flag or first non-flag arg)
-                package = None
-                npx_args = []
-                
-                for i, arg in enumerate(args):
-                    if arg == "-y" and i + 1 < len(args):
-                        # Package is after -y flag
-                        package = args[i + 1]
-                        npx_args = args[:i] + args[i+2:]  # Remove -y and package
-                        break
-                    elif not arg.startswith("-"):
-                        # First non-flag argument is the package
-                        package = arg
-                        npx_args = args[:i] + args[i+1:]  # Remove package from args
-                        break
-                
-                if package:
-                    print(f"Creating NpxStdioTransport for {server_name} with package: {package}, args: {npx_args}")
-                    return NpxStdioTransport(package=package, args=npx_args if npx_args else None)
-            
-            raise ValueError(f"Could not determine NPX package for server {server_name}")
-        
-        else:
-            raise ValueError(f"Unsupported command '{command}' for server {server_name}. Only 'uvx' and 'npx' are supported.")
-    
-    async def list_tools(self) -> List[Dict[str, Any]]:
-        """List all available tools from connected MCP servers."""
-        if not self.active_servers:
-            print("No active MCP servers configured")
-            return []
-        
-        all_tools = []
-        
-        for server_name, server_config in self.active_servers.items():
-            try:
-                print(f"Connecting to server: {server_name}")
-                print(f"Server config: {json.dumps(server_config, indent=2)}")
-                
-                # Create specific transport for this server
-                transport = self._create_transport_for_server(server_name, server_config)
-                
-                # Connect using the specific transport
-                async with Client(transport) as client:
-                    print(f"Client connected to {server_name}, calling list_tools()...")
-                    tools = await client.list_tools()
-                    print(f"Retrieved {len(tools)} tools from {server_name}")
-                    
-                    # Add server name to each tool for identification
-                    for tool in tools:
-                        if isinstance(tool, dict):
-                            tool['_server'] = server_name
-                        else:
-                            # Handle tool objects
-                            tool_dict = {
-                                'name': getattr(tool, 'name', 'unnamed'),
-                                'description': getattr(tool, 'description', ''),
-                                '_server': server_name
-                            }
-                            all_tools.append(tool_dict)
-                            continue
-                    
-                    all_tools.extend(tools)
-                    
-            except Exception as e:
-                print(f"Error connecting to server {server_name}: {str(e)}")
-                print(f"Error type: {type(e).__name__}")
-                continue
-        
-        print(f"Total tools retrieved: {len(all_tools)}")
-        if all_tools:
-            print(f"Tool names: {[tool.get('name', 'unnamed') for tool in all_tools]}")
-        
-        return all_tools
-    
-    async def list_resources(self) -> List[Dict[str, Any]]:
-        """List all available resources from connected MCP servers."""
-        if not self.active_servers:
-            return []
-        
-        try:
-            async with Client({"mcpServers": self.active_servers}) as client:
-                resources = await client.list_resources()
-                return resources
-        except Exception as e:
-            print(f"Error listing resources: {str(e)}")
-            return []
-    
-    async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Call a tool on one of the connected MCP servers."""
-        if not self.active_servers:
-            raise ValueError("No active MCP servers configured")
-        
-        try:
-            async with Client({"mcpServers": self.active_servers}) as client:
-                result = await client.call_tool(tool_name, params)
-                return result
-        except Exception as e:
-            raise Exception(f"Error calling tool {tool_name}: {str(e)}")
-    
-    async def read_resource(self, uri: str) -> List[Dict[str, Any]]:
-        """Read a resource from one of the connected MCP servers."""
-        if not self.active_servers:
-            raise ValueError("No active MCP servers configured")
-        
-        try:
-            async with Client({"mcpServers": self.active_servers}) as client:
-                result = await client.read_resource(uri)
-                return result
-        except Exception as e:
-            raise Exception(f"Error reading resource {uri}: {str(e)}")
-    
-    def get_active_servers(self) -> Dict[str, Dict[str, Any]]:
-        """Get the currently active MCP servers."""
-        return self.active_servers
-    
     def is_connected(self) -> bool:
-        """Check if the client is connected to any MCP servers."""
-        return len(self.active_servers) > 0
+        """Check if the client is connected (same as initialized for FastMCP)."""
+        return self.client is not None
     
     def get_server_status(self) -> Dict[str, Any]:
-        """Get the status of all servers."""
-        status = {
-            "active_servers": list(self.active_servers.keys()),
-            "fastmcp_managed": True
+        """Get the status of all configured servers."""
+        return {
+            "initialized": self.is_initialized(),
+            "connected": self.is_connected(),
+            "active_servers": list(self.active_servers.keys()) if self.active_servers else [],
+            "total_servers": len(self.active_servers) if self.active_servers else 0
         }
+
+    async def get_capabilities(self) -> Dict[str, Any]:
+        """
+        Get all capabilities from all servers in a single session.
+        This follows the best practice of using one session for multiple operations.
+        """
+        if not self.client:
+            raise ValueError("MCP client not initialized")
         
-        return status
+        try:
+            print("Getting all capabilities from MCP servers...")
+            
+            # Single session for multiple operations - CORRECT pattern from reporte.md
+            async with self.client as client:
+                # Get all capabilities in one session
+                tools = await client.list_tools()
+                resources = await client.list_resources()
+                prompts = await client.list_prompts()
+                
+                print(f"Retrieved {len(tools)} tools, {len(resources)} resources, {len(prompts)} prompts")
+                
+                return {
+                    "tools": [{"name": t.name, "description": getattr(t, 'description', '')} for t in tools],
+                    "resources": [{"uri": r.uri, "name": getattr(r, 'name', '')} for r in resources],
+                    "prompts": [{"name": p.name, "description": getattr(p, 'description', '')} for p in prompts]
+                }
+                
+        except Exception as e:
+            print(f"Error getting capabilities: {str(e)}")
+            traceback.print_exc()
+            raise
+
+    async def execute_operations(self, operations: List[Dict[str, Any]]) -> List[Any]:
+        """
+        Execute multiple operations in a single session.
+        This is the CORRECT pattern according to reporte.md.
+        
+        operations: List of operations, each with 'type' and operation-specific parameters
+        Example:
+        [
+            {"type": "list_tools"},
+            {"type": "call_tool", "name": "weather_get_forecast", "params": {"city": "London"}},
+            {"type": "list_resources"}
+        ]
+        """
+        if not self.client:
+            raise ValueError("MCP client not initialized")
+        
+        results = []
+        
+        try:
+            print(f"Executing {len(operations)} operations in single session...")
+            
+            # Single session for ALL operations - CORRECT pattern
+            async with self.client as client:
+                for i, operation in enumerate(operations):
+                    op_type = operation.get("type")
+                    print(f"Executing operation {i+1}/{len(operations)}: {op_type}")
+                    
+                    try:
+                        if op_type == "list_tools":
+                            result = await client.list_tools()
+                            results.append([{"name": t.name, "description": getattr(t, 'description', '')} for t in result])
+                        
+                        elif op_type == "list_resources":
+                            result = await client.list_resources()
+                            results.append([{"uri": r.uri, "name": getattr(r, 'name', '')} for r in result])
+                        
+                        elif op_type == "list_prompts":
+                            result = await client.list_prompts()
+                            results.append([{"name": p.name, "description": getattr(p, 'description', '')} for p in result])
+                        
+                        elif op_type == "call_tool":
+                            tool_name = operation.get("name")
+                            params = operation.get("params", {})
+                            result = await client.call_tool(tool_name, params)
+                            # Keep original FastMCP objects - no unnecessary conversion
+                            results.append(result)
+                        
+                        elif op_type == "read_resource":
+                            uri = operation.get("uri")
+                            result = await client.read_resource(uri)
+                            results.append(result)
+                        
+                        elif op_type == "get_prompt":
+                            name = operation.get("name")
+                            arguments = operation.get("arguments", {})
+                            result = await client.get_prompt(name, arguments)
+                            results.append(result)
+                        
+                        else:
+                            raise ValueError(f"Unknown operation type: {op_type}")
+                            
+                    except Exception as e:
+                        print(f"Error in operation {i+1} ({op_type}): {str(e)}")
+                        results.append({"error": str(e), "operation": operation})
+                
+                print(f"Completed {len(operations)} operations")
+                return results
+                
+        except Exception as e:
+            print(f"Error executing operations: {str(e)}")
+            traceback.print_exc()
+            raise
+
+    # Convenience methods that use the correct pattern
+    async def list_tools(self) -> List[Dict[str, Any]]:
+        """List all available tools. Uses single operation for simplicity."""
+        operations = [{"type": "list_tools"}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> List[Any]:
+        """Call a tool. Uses single operation for simplicity."""
+        operations = [{"type": "call_tool", "name": tool_name, "params": params}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    async def list_resources(self) -> List[Dict[str, Any]]:
+        """List all available resources. Uses single operation for simplicity."""
+        operations = [{"type": "list_resources"}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    async def read_resource(self, uri: str) -> List[Any]:
+        """Read a resource. Uses single operation for simplicity."""
+        operations = [{"type": "read_resource", "uri": uri}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    async def list_prompts(self) -> List[Dict[str, Any]]:
+        """List all available prompts. Uses single operation for simplicity."""
+        operations = [{"type": "list_prompts"}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    async def get_prompt(self, name: str, arguments: Dict[str, Any] = None) -> List[Any]:
+        """Get a prompt. Uses single operation for simplicity."""
+        operations = [{"type": "get_prompt", "name": name, "arguments": arguments or {}}]
+        results = await self.execute_operations(operations)
+        return results[0] if results else []
+
+    def get_active_servers(self) -> Dict[str, Any]:
+        """Get active servers configuration."""
+        return self.active_servers.copy()
+
+    def get_server_names(self) -> List[str]:
+        """Get list of active server names."""
+        return list(self.active_servers.keys())
+
+    def get_config(self) -> Dict[str, Any]:
+        """Get current configuration."""
+        return self.config.copy()
+
+    async def close(self):
+        """Close the client if needed."""
+        # FastMCP handles cleanup automatically
+        # No manual session management needed
+        if self.client:
+            print("MCP client manager closed")
 
 # Create a singleton instance
 mcp_client_manager = MCPClientManager()

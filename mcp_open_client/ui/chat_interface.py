@@ -1,7 +1,7 @@
 from nicegui import ui
 from mcp_open_client.api_client import APIClient
 from .message_parser import parse_and_render_message
-from .chat_handlers import handle_send, get_messages, get_current_conversation_id
+from .chat_handlers import handle_send, get_messages, get_current_conversation_id, render_message_to_ui
 from .conversation_manager import conversation_manager
 
 
@@ -97,20 +97,31 @@ Try asking me something or create a new conversation to get started.'''
                 parse_and_render_message(welcome_message, welcome_card)
         return
     
-    # Render all messages from the conversation
-    with message_container:
-        for message in messages:
-            role = message.get('role', 'user')
-            content = message.get('content', '')
-            
-            if role == 'user':
-                with ui.card().classes('ml-auto mr-4') as user_card:
-                    ui.label('You:').classes('font-bold mb-2')
-                    parse_and_render_message(content, user_card)
-            else:  # assistant
-                with ui.card().classes('') as bot_card:
-                    ui.label('Assistant:').classes('font-bold mb-2')
-                    parse_and_render_message(content, bot_card)
+    render_messages(message_container)
+
+def render_messages(message_container):
+    """Render all messages from the current conversation"""
+    messages = get_messages()
+    
+    # Clear existing messages
+    message_container.clear()
+    
+    if not messages:
+        # Show welcome message if no messages
+        with message_container:
+            with ui.card().classes('') as welcome_card:
+                ui.label('Welcome!').classes('font-bold mb-2')
+                welcome_message = '''Welcome to MCP Open Client!
+
+I can help you interact with MCP (Model Context Protocol) servers and answer your questions.
+
+Try asking me something or create a new conversation to get started.'''
+                parse_and_render_message(welcome_message, welcome_card)
+        return
+    
+    # Render all messages from the conversation using the centralized function
+    for message in messages:
+        render_message_to_ui(message, message_container)
 
 
 def create_demo_messages(message_container):

@@ -6,7 +6,8 @@
         "-y",
         "@upstash/context7-mcp"
       ],
-      "disabled": true
+      "transport": "stdio",
+      "disabled": false
     },
     "mcp-requests": {
       "disabled": false,
@@ -16,7 +17,8 @@
       ],
       "env": {
         "key": "val"
-      }
+      },
+      "transport": "stdio"
     }
   }
 }

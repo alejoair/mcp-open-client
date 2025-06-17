@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
 import asyncio
+import json
 
 # Global variable to track current conversation
 current_conversation_id: Optional[str] = None
@@ -75,6 +76,54 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         conversations[current_conversation_id]['messages'].append(message)
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
+
+def render_message_to_ui(message: dict, message_container) -> None:
+    """Render a single message to the UI"""
+    role = message.get('role', 'user')
+    content = message.get('content', '')
+    tool_calls = message.get('tool_calls', [])
+    tool_call_id = message.get('tool_call_id')
+    
+    with message_container:
+        if role == 'user':
+            with ui.card().classes('ml-auto mr-4 mb-6') as user_card:
+                ui.label('You:').classes('font-bold mb-2')
+                parse_and_render_message(content, user_card)
+        elif role == 'assistant':
+            with ui.card().classes('mb-6') as bot_card:
+                ui.label('Assistant:').classes('font-bold mb-2')
+                if content:
+                    parse_and_render_message(content, bot_card)
+                
+                # Show tool calls if present
+                if tool_calls:
+                    ui.separator().classes('my-2')
+                    for i, tool_call in enumerate(tool_calls):
+                        function_info = tool_call.get('function', {})
+                        tool_name = function_info.get('name', 'unknown')
+                        tool_args = function_info.get('arguments', '{}')
+                        
+                        with ui.expansion(f"🔧 Tool Call {i+1}: {tool_name}",
+                                        icon='build',
+                                        value=False).classes('w-full mb-4 border-l-4 border-blue-400'):
+                            ui.label('Function:').classes('font-semibold text-blue-300')
+                            ui.code(tool_name, language='text').classes('mb-2')
+                            ui.label('Arguments:').classes('font-semibold text-blue-300')
+                            try:
+                                # Try to format JSON arguments nicely
+                                formatted_args = json.dumps(json.loads(tool_args), indent=2)
+                                ui.code(formatted_args, language='json')
+                            except:
+                                ui.code(tool_args, language='json')
+        elif role == 'tool':
+            # Extract tool name from content if possible, or use generic name
+            tool_name = "Tool Response"
+            
+            with ui.expansion(f"🔧 {tool_name}",
+                            icon='check_circle',
+                            value=False).classes('w-full mb-4 border-l-4 border-emerald-400') as tool_expansion:
+                ui.label('Response:').classes('font-semibold text-emerald-300')
+                parse_and_render_message(content, tool_expansion)
 
 def save_current_conversation() -> None:
     """Save current conversation to storage"""
@@ -240,14 +289,13 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
         # Add user message to conversation storage
         add_message('user', message)
         
-        # Add user message to UI
-        with message_container:
-            with ui.card().classes('ml-auto mr-4 max-w-md') as user_card:
-                ui.label('You:').classes('font-bold mb-2')
-                parse_and_render_message(message, user_card)
-        
         # Clear input
         input_field.value = ''
+        
+        # Re-render all messages to show the new user message
+        message_container.clear()
+        from .chat_interface import render_messages
+        render_messages(message_container)
         
         # Auto-scroll to bottom after adding user message
         await safe_scroll_to_bottom(scroll_area, delay=0.15)
@@ -299,14 +347,25 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
                 assistant_message = response['choices'][0]['message']
                 add_message('assistant', assistant_message.get('content', ''), tool_calls=assistant_message.get('tool_calls'))
                 
+                # Update UI immediately after adding assistant message with tool calls
+                message_container.clear()
+                from .chat_interface import render_messages
+                render_messages(message_container)
+                await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                
                 # Process each tool call
                 tool_results = []
                 for tool_call in tool_calls:
                     tool_result = await handle_tool_call(tool_call)
                     tool_results.append(tool_result)
                     
-                    # Add tool result to conversation UI
+                    # Add tool result to conversation storage
                     add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                    
+                    # Update UI immediately after each tool result
+                    message_container.clear()
+                    render_messages(message_container)
+                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
                 
                 # Update API messages with assistant message including tool calls
                 api_messages.append({
@@ -323,24 +382,81 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
                         "content": tool_result['content']
                     })
                 
-                # Get final response from LLM after tool execution
-                final_response = await api_client.chat_completion(api_messages, tools=available_tools)
-                bot_response = final_response['choices'][0]['message']['content']
+                # Continue processing until no more tool calls
+                while True:
+                    final_response = await api_client.chat_completion(api_messages, tools=available_tools)
+                    
+                    # Check if this response also has tool calls
+                    if is_tool_call_response(final_response):
+                        # Process additional tool calls
+                        additional_tool_calls = extract_tool_calls(final_response)
+                        
+                        # Add the assistant message with tool calls
+                        assistant_message = final_response['choices'][0]['message']
+                        add_message('assistant', assistant_message.get('content', ''), tool_calls=assistant_message.get('tool_calls'))
+                        
+                        # Update UI immediately after adding assistant message with tool calls
+                        message_container.clear()
+                        from .chat_interface import render_messages
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                        # Update API messages
+                        api_messages.append({
+                            "role": "assistant",
+                            "content": assistant_message.get('content'),
+                            "tool_calls": assistant_message.get('tool_calls')
+                        })
+                        
+                        # Process each additional tool call
+                        additional_tool_results = []
+                        for tool_call in additional_tool_calls:
+                            tool_result = await handle_tool_call(tool_call)
+                            additional_tool_results.append(tool_result)
+                            
+                            # Add tool result to conversation storage
+                            add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                            
+                            # Update UI immediately after each tool result
+                            message_container.clear()
+                            render_messages(message_container)
+                            await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                        # Add tool results to API messages
+                        for tool_result in additional_tool_results:
+                            api_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_result['tool_call_id'],
+                                "content": tool_result['content']
+                            })
+                        
+                        # Continue the loop to get next response
+                        continue
+                    else:
+                        # No more tool calls, this is the final text response
+                        bot_response = final_response['choices'][0]['message']['content']
+                        add_message('assistant', bot_response)
+                        break
+                
             else:
                 # Regular response without tool calls
                 bot_response = response['choices'][0]['message']['content']
+                
+                # Add assistant response to conversation storage
+                add_message('assistant', bot_response)
             
-            # Remove spinner
-            spinner.delete()
+            # Remove spinner safely
+            try:
+                if spinner and hasattr(spinner, 'parent_slot') and spinner.parent_slot:
+                    spinner.delete()
+            except (ValueError, AttributeError):
+                # Spinner already removed or doesn't exist
+                pass
             
-            # Add assistant response to conversation storage
-            add_message('assistant', bot_response)
-            
-            # Add bot response to UI
-            with message_container:
-                with ui.card().classes('mr-auto ml-4') as bot_card:
-                    ui.label('Bot:').classes('font-bold mb-2')
-                    parse_and_render_message(bot_response, bot_card)
+            # Re-render all messages (this will show everything including tool calls and responses)
+            message_container.clear()
+            from .chat_interface import render_messages
+            render_messages(message_container)
             
             # Refresh conversation manager to update sidebar
             from .conversation_manager import conversation_manager
@@ -351,8 +467,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
             
         except Exception as e:
             # Remove spinner if error occurs
-            if 'spinner' in locals():
-                spinner.delete()
+            try:
+                if 'spinner' in locals() and spinner and hasattr(spinner, 'parent_slot') and spinner.parent_slot:
+                    spinner.delete()
+            except (ValueError, AttributeError):
+                # Spinner already removed or doesn't exist
+                pass
             
             # Add error message to conversation storage
             error_message = f'Error: {str(e)}'
