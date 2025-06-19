@@ -1,31 +1,9 @@
 from nicegui import ui, app
-import json
-import os
 import asyncio
-from typing import Dict, Any
 from mcp_open_client.mcp_client import mcp_client_manager
 
-# Path to the MCP configuration file
-MCP_CONFIG_PATH = os.path.join('mcp_open_client/settings', 'mcp-config.json')
-
-# Function to save configuration to file
-def save_config_to_file(config: Dict[str, Any]) -> bool:
-    """Save the MCP configuration to the file system"""
-    try:
-        # Ensure the directory exists
-        os.makedirs(os.path.dirname(MCP_CONFIG_PATH), exist_ok=True)
-        
-        # Write the configuration to file
-        with open(MCP_CONFIG_PATH, 'w') as f:
-            json.dump(config, f, indent=2)
-            
-        print(f"Configuration saved to {MCP_CONFIG_PATH}")
-        return True
-    except Exception as e:
-        error_msg = f"Error saving configuration: {str(e)}"
-        print(error_msg)
-        ui.notify(error_msg, color='negative')
-        return False
+# File operations removed - using only app.storage.user which is persistent
+# Configuration is automatically saved by NiceGUI's storage system
 
 def show_content(container):
     """Main function to display the MCP servers management UI"""
@@ -44,9 +22,7 @@ def show_content(container):
             mcp_config = {"mcpServers": {}}
             app.storage.user['mcp-config'] = mcp_config
             
-            # Save the empty configuration to file if it doesn't exist
-            if not os.path.exists(MCP_CONFIG_PATH):
-                save_config_to_file(mcp_config)
+            # Configuration is automatically saved in user storage
         
         servers = mcp_config.get("mcpServers", {})
         
@@ -173,7 +149,7 @@ def show_content(container):
                 app.storage.user['mcp-config'] = current_config
                 
                 # Save configuration to file
-                save_config_to_file(current_config)
+                # Configuration automatically saved in user storage
                 
                 ui.notify(f"Server '{server_name}' deleted", color='positive')
                 
@@ -298,8 +274,7 @@ def show_content(container):
                         current_config["mcpServers"][server_name] = updated_config
                         app.storage.user['mcp-config'] = current_config
                         
-                        # Save configuration to file
-                        save_config_to_file(current_config)
+                        # Configuration automatically saved in user storage
                         
                         # Update the MCP client manager with the new configuration
                         async def update_mcp_client():
@@ -424,8 +399,7 @@ def show_content(container):
                         current_config["mcpServers"][name] = new_config
                         app.storage.user['mcp-config'] = current_config
                         
-                        # Save configuration to file
-                        save_config_to_file(current_config)
+                        # Configuration automatically saved in user storage
                         
                         # Update the MCP client manager with the new configuration
                         async def update_mcp_client():
@@ -462,43 +436,35 @@ def show_content(container):
         def reset_to_default():
             """Reset the MCP configuration to default values"""
             try:
-                # Read the default configuration from file
-                default_config_path = os.path.join('settings', 'mcp-config.json')
-                if os.path.exists(default_config_path):
-                    with open(default_config_path, 'r') as f:
-                        default_config = json.load(f)
+                # Set to empty default configuration
+                default_config = {"mcpServers": {}}
+                
+                # Update the user storage with default configuration
+                app.storage.user['mcp-config'] = default_config
+                
+                # Update the MCP client manager with the default configuration
+                async def update_mcp_client():
+                    try:
+                        success = await mcp_client_manager.initialize(default_config)
+                        if success:
+                            active_servers = mcp_client_manager.get_active_servers()
+                            # Use storage for safe notification from background tasks
+                            app.storage.user['mcp_status'] = f"Connected to {len(active_servers)} MCP servers"
+                            app.storage.user['mcp_status_color'] = 'positive'
+                        else:
+                            app.storage.user['mcp_status'] = "No active MCP servers"
+                            app.storage.user['mcp_status_color'] = 'warning'
+                    except Exception as e:
+                        app.storage.user['mcp_status'] = f"Error connecting to MCP servers: {str(e)}"
+                        app.storage.user['mcp_status_color'] = 'negative'
                     
-                    # Update the user storage with default configuration
-                    app.storage.user['mcp-config'] = default_config
-                    
-                    # Save configuration to file (although this is redundant when resetting to default)
-                    save_config_to_file(default_config)
-                    
-                    # Update the MCP client manager with the default configuration
-                    async def update_mcp_client():
-                        try:
-                            success = await mcp_client_manager.initialize(default_config)
-                            if success:
-                                active_servers = mcp_client_manager.get_active_servers()
-                                # Use storage for safe notification from background tasks
-                                app.storage.user['mcp_status'] = f"Connected to {len(active_servers)} MCP servers"
-                                app.storage.user['mcp_status_color'] = 'positive'
-                            else:
-                                app.storage.user['mcp_status'] = "No active MCP servers"
-                                app.storage.user['mcp_status_color'] = 'warning'
-                        except Exception as e:
-                            app.storage.user['mcp_status'] = f"Error connecting to MCP servers: {str(e)}"
-                            app.storage.user['mcp_status_color'] = 'negative'
-                        
-                        # Refresh the UI after the client has been initialized
-                        refresh_servers_list()
-                    
-                    # Run the update asynchronously
-                    asyncio.create_task(update_mcp_client())
-                    
-                    ui.notify('Configuration reset to default values', color='positive')
-                else:
-                    ui.notify('Default configuration file not found', color='negative')
+                    # Refresh the UI after the client has been initialized
+                    refresh_servers_list()
+                
+                # Run the update asynchronously
+                asyncio.create_task(update_mcp_client())
+                
+                ui.notify('Configuration reset to default values', color='positive')
             except Exception as e:
                 ui.notify(f'Error resetting configuration: {str(e)}', color='negative')
         

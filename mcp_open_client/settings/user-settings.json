@@ -1,5 +1,6 @@
 {
   "api_key": "sk-example-key-12345",
   "base_url": "http://localhost:1234/v1",
-  "model": "claude-3-5-sonnet"
+  "model": "claude-3-5-sonnet",
+  "system_prompt": "you are a helpfull assistant, your name is Jill"
 }

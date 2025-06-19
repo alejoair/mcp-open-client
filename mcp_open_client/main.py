@@ -22,27 +22,70 @@ from mcp_open_client.ui.chat_handlers import (
 # Load the external CSS file from settings directory with cache busting
 ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
 
+def load_initial_config_from_files():
+    """Load initial configuration from files into user storage (one-time operation)"""
+    configs_loaded = {
+        'mcp-config': {"mcpServers": {}},
+        'user-config': {
+            "api_key": "",
+            "base_url": "http://192.168.58.101:8123",
+            "model": "claude-3-5-sonnet"
+        },
+        'user-settings': {"clave": "valor"}
+    }
+
+    # Load MCP configuration (only MCP servers)
+    try:
+        with open('mcp_open_client/settings/mcp-config.json', 'r') as f:
+            mcp_file_config = json.load(f)
+        configs_loaded['mcp-config'] = {
+            "mcpServers": mcp_file_config.get("mcpServers", {})
+        }
+        print("Loaded MCP servers configuration from mcp-config.json")
+    except Exception as e:
+        print(f"Warning: Could not load MCP config: {str(e)}")
+
+    # Load user configuration (API settings) from separate file
+    try:
+        with open('mcp_open_client/settings/user-settings.json', 'r') as f:
+            content = json.load(f)
+            configs_loaded['user-config'].update(content)
+        print("Loaded user configuration from user-settings.json")
+    except Exception as e:
+        print(f"Warning: Could not load user settings: {str(e)}")
+
+    return configs_loaded
+        
+
+
 def init_storage():
-    """Initialize storage without JavaScript execution"""
-    # Initialize user settings
-    if 'user-settings' not in app.storage.user:
-        app.storage.user['user-settings'] = {"clave": "valor"}
-    
+    """Initialize storage - load from files only on first run"""
     # Initialize theme from browser storage or default to dark
     if 'dark_mode' not in app.storage.browser:
         app.storage.browser['dark_mode'] = True
     ui.dark_mode().bind_value(app.storage.browser, 'dark_mode')
     
-    # Always load configuration from file to ensure persistence
-    try:
-        with open('mcp_open_client/settings/mcp-config.json', 'r') as f:
-            app.storage.user['mcp-config'] = json.load(f)
-        print("Loaded MCP configuration from file")
-    except Exception as e:
-        print(f"Error loading MCP configuration: {str(e)}")
-        # Only initialize empty config if it doesn't exist in storage
-        if 'mcp-config' not in app.storage.user:
-            app.storage.user['mcp-config'] = {"mcpServers": {}}
+    print("Loading initial configuration from files")
+    initial_configs = load_initial_config_from_files()
+
+    # Copy all configurations to user storage
+    for key, config in initial_configs.items():
+        app.storage.user[key] = config
+        print(f"Initialized {key} in user storage")
+
+    print("Configuration migration complete - future changes will be stored in user storage only")
+
+    # Ensure required keys exist with defaults if somehow missing
+    if 'user-settings' not in app.storage.user:
+        app.storage.user['user-settings'] = {"clave": "valor"}
+    if 'user-config' not in app.storage.user:
+        app.storage.user['user-config'] = {
+            "api_key": "",
+            "base_url": "http://192.168.58.101:8123",
+            "model": "claude-3-5-sonnet"
+        }
+    if 'mcp-config' not in app.storage.user:
+        app.storage.user['mcp-config'] = {"mcpServers": {}}
 
 async def init_mcp_client():
     """Initialize MCP client manager with the configuration"""

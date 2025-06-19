@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Optional, Union, Any
 import openai
 from openai import AsyncOpenAI
+from nicegui import app
 
 # Configure logging with less verbosity
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -21,20 +22,33 @@ class APIClientError(Exception):
 class APIClient:
     def __init__(
         self, 
-        base_url: str = "http://192.168.58.101:8123",
-        api_key: str = "sisas", 
-        model: str = "claude-3-5-sonnet",
         max_retries: int = 10,
         timeout: float = 60.0
     ):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.model = model
+        self.base_url = None
+        self.api_key = None
+        self.model = None
         self.max_retries = max_retries
         self.timeout = timeout
         self._client = None
+        self._load_user_settings()
         self._initialize_client()
-        logger.info(f"Initialized APIClient with base URL: {base_url}")
+
+    def _load_user_settings(self):
+        # Use the new user-config storage (independent from MCP config)
+        user_config = app.storage.user.get('user-config', {})
+        
+        # Fallback to legacy user-settings if user-config doesn't exist
+        user_settings = app.storage.user.get('user-settings', {})
+        
+        self.base_url = user_config.get('base_url') or user_settings.get('base_url', "http://192.168.58.101:8123")
+        self.api_key = user_config.get('api_key') or user_settings.get('api_key', "")
+        self.model = user_config.get('model') or user_settings.get('model', "claude-3-5-sonnet")
+
+    def update_settings(self):
+        self._load_user_settings()
+        self._initialize_client()
+        logger.info(f"Updated APIClient settings")
 
     def _initialize_client(self):
         self._client = AsyncOpenAI(
@@ -43,7 +57,7 @@ class APIClient:
             timeout=self.timeout,
             max_retries=self.max_retries
         )
-        # Removed debug log for cleaner output
+        logger.info(f"Initialized APIClient with base URL: {self.base_url}")
 
     async def list_models(self) -> List[Dict[str, Any]]:
         try:
