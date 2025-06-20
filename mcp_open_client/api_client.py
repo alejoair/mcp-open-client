@@ -35,15 +35,19 @@ class APIClient:
         self._initialize_client()
 
     def _load_user_settings(self):
-        # Use the new user-config storage (independent from MCP config)
-        user_config = app.storage.user.get('user-config', {})
-        
-        # Fallback to legacy user-settings if user-config doesn't exist
+        # Use user-settings storage from user-settings.json
         user_settings = app.storage.user.get('user-settings', {})
         
-        self.base_url = user_config.get('base_url') or user_settings.get('base_url', "http://192.168.58.101:8123")
-        self.api_key = user_config.get('api_key') or user_settings.get('api_key', "")
-        self.model = user_config.get('model') or user_settings.get('model', "claude-3-5-sonnet")
+        # Set defaults if not found
+        self.base_url = user_settings.get('base_url')
+        self.api_key = user_settings.get('api_key')
+        self.model = user_settings.get('model')
+        
+        logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}, API Key: {'[SET]' if self.api_key else '[NOT SET]'}")
+        
+        # Validate that we have the minimum required settings
+        if not self.base_url or not self.model:
+            logger.warning("Missing required settings in user-settings, using defaults")
 
     def update_settings(self):
         self._load_user_settings()

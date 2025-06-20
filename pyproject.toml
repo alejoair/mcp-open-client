@@ -23,7 +23,8 @@ dependencies = [
     "openai",
     "jsonschema",
     "requests",
-    "fastmcp"
+    "fastmcp",
+    "websockets>=11.0"  # Add the latest version of websockets
 ]
 
 [project.optional-dependencies]

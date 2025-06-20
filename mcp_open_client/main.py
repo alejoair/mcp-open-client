@@ -6,7 +6,12 @@ import sys
 # Import UI components
 from mcp_open_client.ui.home import show_content as show_home_content
 from mcp_open_client.ui.mcp_servers import show_content as show_mcp_servers_content
-from mcp_open_client.ui.configure import show_content as show_configure_content
+# Import show_content function at runtime to avoid circular import
+def get_show_configure_content():
+    from mcp_open_client.ui.configure import show_content
+    return show_content
+
+# Use get_show_configure_content() when you need to call show_content
 from mcp_open_client.ui.chat_window import show_content as show_chat_content
 
 # Import MCP client manager
@@ -19,44 +24,13 @@ from mcp_open_client.ui.chat_handlers import (
     delete_conversation, get_current_conversation_id
 )
 
+# Import config utilities
+from mcp_open_client.config_utils import load_initial_config_from_files
+
 # Load the external CSS file from settings directory with cache busting
 ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
 
-def load_initial_config_from_files():
-    """Load initial configuration from files into user storage (one-time operation)"""
-    configs_loaded = {
-        'mcp-config': {"mcpServers": {}},
-        'user-config': {
-            "api_key": "",
-            "base_url": "http://192.168.58.101:8123",
-            "model": "claude-3-5-sonnet"
-        },
-        'user-settings': {"clave": "valor"}
-    }
-
-    # Load MCP configuration (only MCP servers)
-    try:
-        with open('mcp_open_client/settings/mcp-config.json', 'r') as f:
-            mcp_file_config = json.load(f)
-        configs_loaded['mcp-config'] = {
-            "mcpServers": mcp_file_config.get("mcpServers", {})
-        }
-        print("Loaded MCP servers configuration from mcp-config.json")
-    except Exception as e:
-        print(f"Warning: Could not load MCP config: {str(e)}")
-
-    # Load user configuration (API settings) from separate file
-    try:
-        with open('mcp_open_client/settings/user-settings.json', 'r') as f:
-            content = json.load(f)
-            configs_loaded['user-config'].update(content)
-        print("Loaded user configuration from user-settings.json")
-    except Exception as e:
-        print(f"Warning: Could not load user settings: {str(e)}")
-
-    return configs_loaded
         
-
 
 def init_storage():
     """Initialize storage - load from files only on first run"""
@@ -72,20 +46,18 @@ def init_storage():
     for key, config in initial_configs.items():
         app.storage.user[key] = config
         print(f"Initialized {key} in user storage")
+    
+    # user-settings is already loaded above in the loop
 
     print("Configuration migration complete - future changes will be stored in user storage only")
 
     # Ensure required keys exist with defaults if somehow missing
     if 'user-settings' not in app.storage.user:
-        app.storage.user['user-settings'] = {"clave": "valor"}
-    if 'user-config' not in app.storage.user:
-        app.storage.user['user-config'] = {
-            "api_key": "",
-            "base_url": "http://192.168.58.101:8123",
-            "model": "claude-3-5-sonnet"
-        }
+        app.storage.user['user-settings'] = initial_configs.get("user-settings", {})
+
     if 'mcp-config' not in app.storage.user:
-        app.storage.user['mcp-config'] = {"mcpServers": {}}
+        app.storage.user['mcp-config'] = initial_configs.get("mcp-config", {})
+        
 
 async def init_mcp_client():
     """Initialize MCP client manager with the configuration"""
@@ -144,7 +116,7 @@ def create_conversations_section():
             'New Chat',
             icon='add',
             on_click=lambda: create_new_conversation_and_refresh()
-        ).props('flat no-caps align-left full-width size=sm color=primary').classes('q-mb-sm')
+        ).props('flat no-caps full-width size=sm color=primary').classes('mobile-button q-mb-sm')
     
         # Conversations list container - store reference globally for updates
         global conversations_container
@@ -199,19 +171,19 @@ def populate_conversations_list(container):
             if conv_id == current_id:
                 button_classes += ' bg-blue-1 text-blue-8'
             
-            with ui.row().classes('w-full items-center no-wrap'):
+            with ui.row().classes('conversation-item w-full items-center no-wrap'):
                 # Conversation button (takes most space)
                 conv_btn = ui.button(
                     title,
                     on_click=lambda cid=conv_id: load_conversation_and_refresh(cid)
-                ).props('flat no-caps align-left').classes(f'{button_classes} flex-1 text-caption')
+                ).props('flat no-caps align-left').classes(f'{button_classes} flex-1 conversation-title')
                 conv_btn.style('min-width: 0; overflow: hidden; text-overflow: ellipsis;')
                 
                 # Delete button (small)
                 ui.button(
                     icon='delete_outline',
                     on_click=lambda cid=conv_id: delete_conversation_with_confirm(cid)
-                ).props('flat round size=xs color=grey-6').classes('q-ml-xs').style('min-width: 20px; width: 20px; height: 20px;')
+                ).props('flat round size=xs color=grey-6').classes('conversation-delete q-ml-xs')
 
 def load_conversation_and_refresh(conversation_id: str):
     """Load a conversation and refresh the UI"""
@@ -255,6 +227,12 @@ def setup_ui():
     def index():
         """Main application page"""
         
+        # Add mobile viewport meta tag
+        ui.add_head_html('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">')
+        ui.add_head_html('<meta name="mobile-web-app-capable" content="yes">')
+        ui.add_head_html('<meta name="apple-mobile-web-app-capable" content="yes">')
+        ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
+        
         # Initialize storage first
         init_storage()
         
@@ -286,29 +264,22 @@ def setup_ui():
         def is_active(section):
             return 'active' if section == active_section else ''
         
-        content_container = ui.row().classes('h-full w-full')
+        content_container = ui.row().classes('main-content h-full w-full')
         
         def update_content(section):
             nonlocal active_section
             active_section = section  # ✅ Variable local, NO storage
-            # Actualizar las clases de los elementos del menú
-            for item in left_drawer.default_slot.children:
-                if hasattr(item, 'default_slot') and item.default_slot.children:
-                    for child in item.default_slot.children:
-                        if hasattr(child, 'classes'):
-                            section_name = child.props.get('on_click', lambda: None).__name__.split('_')[-1]
-                            if section_name == section:
-                                child.classes(add='active')
-                            else:
-                                child.classes(remove='active')
+            
+            # Clear content first
             content_container.clear()
             
+            # Show content based on section
             if section == 'home':
                 show_home_content(content_container)
             elif section == 'mcp_servers':
                 show_mcp_servers_content(content_container)
             elif section == 'configure':
-                show_configure_content(content_container)
+                get_show_configure_content()(content_container)
             elif section == 'chat':
                 show_chat_content(content_container)
         
@@ -317,75 +288,77 @@ def setup_ui():
         current_update_content_function = update_content
         
         with ui.header(elevated=True).classes('app-header'):
-            with ui.row().classes('items-center full-width'):
-                with ui.row().classes('items-center'):
-                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('q-mr-sm')
+            with ui.row().classes('items-center full-width no-wrap'):
+                with ui.row().classes('items-center no-wrap'):
+                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn q-mr-sm')
                     ui.label('MCP-Open-Client').classes('app-title text-h5')
                 
                 ui.space()
                 
-                with ui.row().classes('items-center'):
-                    ui.button(icon='notifications').classes('q-mr-sm').tooltip('Notifications')
-                    ui.button(icon='help_outline').classes('q-mr-sm').tooltip('Help')
-                    ui.button(icon='dark_mode', on_click=lambda: ui.dark_mode().toggle()).classes('q-mr-sm').tooltip('Toggle dark/light mode')
-                    ui.button(icon='account_circle').tooltip('User Account')
+                with ui.row().classes('header-actions items-center no-wrap'):
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
+            
+            def handle_navigation(section):
+                """Handle navigation and close drawer on mobile"""
+                update_content(section)
+                # Auto-close drawer on mobile after selection
+                left_drawer.set_value(False)  # Close drawer
             
             with ui.column().classes('w-full gap-2'):
                 # Home button
                 ui.button(
                     'Home',
                     icon='home',
-                    on_click=lambda: update_content('home')
+                    on_click=lambda: handle_navigation('home')
                 ).props(
                     'flat no-caps align-left full-width'
                 ).classes(
-                    f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("home")}'
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("home")}'
                 )
                 # MCP Servers button
                 ui.button(
                     'MCP Servers',
                     icon='dns',
-                    on_click=lambda: update_content('mcp_servers')
+                    on_click=lambda: handle_navigation('mcp_servers')
                 ).props(
                     'flat no-caps align-left full-width'
                 ).classes(
-                    f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("mcp_servers")}'
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("mcp_servers")}'
                 )
                 
                 # Configure button
                 ui.button(
                     'Configure',
                     icon='settings',
-                    on_click=lambda: update_content('configure')
+                    on_click=lambda: handle_navigation('configure')
                 ).props(
                     'flat no-caps align-left full-width'
                 ).classes(
-                    f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("configure")}'
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("configure")}'
                 )
                 
                 # Chat button
                 ui.button(
                     'Chat',
                     icon='chat',
-                    on_click=lambda: update_content('chat')
+                    on_click=lambda: handle_navigation('chat')
                 ).props(
                     'flat no-caps align-left full-width'
                 ).classes(
-                    f'drawer-btn text-weight-medium text-subtitle1 q-py-sm {is_active("chat")}'
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("chat")}'
                 )
             
             # Conversations section
             ui.separator().classes('q-my-md')
             create_conversations_section()
             
-            ui.separator()
-            with ui.row().classes('w-full items-center justify-between'):
-                ui.label('© 2025 MCP Open Client').classes('text-subtitle2')
-                with ui.row().classes('items-center'):
-                    ui.button('Documentation', on_click=lambda: ui.open('https://docs.mcp-open-client.com'))
+            ui.separator().classes('q-my-md')
+            with ui.column().classes('w-full'):
+                ui.label('© 2025 MCP Open Client').classes('text-caption text-center q-mb-sm')
+                ui.button('Documentation', icon='help_outline', on_click=lambda: ui.open('https://docs.mcp-open-client.com')).props('flat no-caps full-width size=sm').classes('drawer-btn')
         
         # Set home as the default content
         update_content('chat')
@@ -404,7 +377,7 @@ setup_ui()
 # Run the server - this needs to be at module level for entry points
 ui.run(
     storage_secret="ultrasecretkeyboard",
-    port=8082,
+    port=8090,
     reload=False,
     dark=True,
     show_welcome_message=True,

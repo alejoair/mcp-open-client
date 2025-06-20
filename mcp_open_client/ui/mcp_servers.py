@@ -111,9 +111,6 @@ def show_content(container):
                 
                 app.storage.user['mcp-config'] = current_config
                 
-                # Save configuration to file
-                save_config_to_file(current_config)
-                
                 status_text = "disabled" if is_active else "enabled"
                 ui.notify(f"Server '{server_name}' {status_text}", color='positive')
                 

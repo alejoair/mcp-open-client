@@ -86,11 +86,11 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('ml-auto mr-4 mb-6') as user_card:
-                ui.label('You:').classes('font-bold mb-2')
+            with ui.card().classes('user-message message-bubble ml-auto mb-4') as user_card:
+                ui.label('You:').classes('font-bold mb-2 text-white')
                 parse_and_render_message(content, user_card)
         elif role == 'assistant':
-            with ui.card().classes('mb-6') as bot_card:
+            with ui.card().classes('assistant-message message-bubble mb-4') as bot_card:
                 ui.label('Assistant:').classes('font-bold mb-2')
                 if content:
                     parse_and_render_message(content, bot_card)

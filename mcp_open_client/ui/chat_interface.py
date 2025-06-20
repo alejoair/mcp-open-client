@@ -38,10 +38,10 @@ def create_chat_interface(container):
     ui.query('.q-page').classes('flex')
     ui.query('.nicegui-content').classes('w-full')
     
-    # Main layout container - no splitter needed since conversations are in main sidebar
-    with ui.column().classes('h-full w-full flex flex-col'):
+    # Main layout container - optimized for mobile
+    with ui.column().classes('chat-container h-full w-full flex flex-col'):
                 
-                # TABS SECTION - Fixed at top
+                # TABS SECTION - Fixed at top (optional, can be hidden on mobile)
                 with ui.tabs().classes('w-full shrink-0') as tabs:
                     chat_tab = ui.tab('Chat')
                 
@@ -51,8 +51,8 @@ def create_chat_interface(container):
                     # Chat Panel - Message container with scroll
                     with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
 
-                        with ui.scroll_area().classes('h-full w-full') as scroll_area:
-                            message_container = ui.column().classes('w-full gap-2')
+                        with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
+                            message_container = ui.column().classes('w-full gap-2 q-pa-md')
                             
                             # Load messages from current conversation
                             load_conversation_messages(message_container)
@@ -67,17 +67,22 @@ def create_chat_interface(container):
                 
                 conversation_manager.set_refresh_callback(refresh_chat)
 
-                # SEND MESSAGE SECTION - Fixed at bottom
-                with ui.row().classes('w-full items-center mb-25 shrink-0'):
-                    text_input = ui.input(placeholder='Message...').props('rounded outlined input-class=mx-3').classes('flex-grow')
+                # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
+                with ui.row().classes('chat-input-area w-full items-end gap-3 shrink-0'):
+                    text_input = ui.textarea(placeholder='Type your message... (Press Enter to send)').props('rounded outlined autogrow input-style="max-height: 120px"').classes('mobile-textarea flex-grow')
+                    
                     # Create async wrapper functions for the event handlers
                     async def send_message():
-                        await handle_send(text_input, message_container, api_client, scroll_area)
+                        if text_input.value and text_input.value.strip():
+                            await handle_send(text_input, message_container, api_client, scroll_area)
                     
-                    send_button = ui.button('Send', icon='send', on_click=send_message).props('no-caps')
+                    send_button = ui.button(icon='send', on_click=send_message).classes('send-button')
                     
                     # Enable sending with Enter key
                     text_input.on('keydown.enter', send_message)
+                    
+                    # Add instructions for users
+                    ui.label('Press Enter to send, Shift+Enter for new line').classes('text-caption text-grey-6 q-mt-xs')
 
 
 def load_conversation_messages(message_container):
