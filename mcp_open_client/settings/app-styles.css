@@ -420,3 +420,324 @@ body {
         padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
     }
 }
+
+/* ====== HEADER IMPROVEMENTS (moved from main.py) ====== */
+/* Header improvements */
+.app-header {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+.app-header .q-header {
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    padding: 0 !important;
+}
+
+/* Header buttons - closer to top */
+.header-btn {
+    margin: 0 !important;
+    padding: 8px !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    border-radius: 4px !important;
+    align-self: center !important;
+}
+
+.header-btn .q-btn__content {
+    min-height: 24px !important;
+    height: 24px !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+}
+
+/* Header row alignment */
+.app-header .q-toolbar {
+    height: 64px !important;
+    min-height: 64px !important;
+    padding: 12px !important;
+}
+
+/* ====== CHAT INTERFACE STYLES (moved from chat_interface.py) ====== */
+/* Links styling */
+a:link, a:visited {
+    color: inherit !important;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+/* Code blocks styling */
+.nicegui-code {
+    border-radius: 8px !important;
+    margin: 8px 0 !important;
+    font-size: 14px !important;
+}
+
+/* Basic card styling */
+.q-card {
+    border-radius: 12px !important;
+}
+
+/* Field control styling */
+.q-field__control {
+    border-radius: 12px !important;
+}
+
+.q-field--outlined .q-field__control {
+    border-radius: 12px !important;
+}
+
+/* Input improvements for better visibility */
+.mobile-textarea .q-field__control {
+    min-height: 48px !important;
+}
+
+/* Send button improvements */
+.send-button {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* ====== CONFIGURE PAGE STYLES ====== */
+/* Configure page header */
+.configure-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.configure-title {
+    background: linear-gradient(135deg, var(--q-primary) 0%, #1976d2 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.025em !important;
+}
+
+.configure-subtitle {
+    opacity: 0.8;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Configure main card */
+.configure-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 24px !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.configure-card:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Configure sections */
+.configure-section {
+    position: relative;
+    padding: 1.5rem;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: all 0.3s ease;
+}
+
+.configure-section:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.section-title {
+    color: var(--q-primary) !important;
+    font-weight: 600 !important;
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+/* Configure inputs */
+.configure-input {
+    margin-bottom: 1rem;
+}
+
+.configure-input .q-field__control {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 16px !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.configure-input .q-field--focused .q-field__control {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: var(--q-primary) !important;
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1) !important;
+}
+
+.configure-input .q-field__label {
+    font-weight: 500 !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Info tips */
+.info-tip {
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+    border-radius: 12px;
+    align-items: center;
+}
+
+.tip-text {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 500;
+}
+
+/* Model refresh button */
+.model-refresh-btn {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+}
+
+.model-refresh-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 16px rgba(25, 118, 210, 0.3) !important;
+}
+
+/* Action buttons */
+.configure-actions {
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.save-btn {
+    background: linear-gradient(135deg, var(--q-primary) 0%, #1976d2 100%) !important;
+    border: none !important;
+    border-radius: 16px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    padding: 0.75rem 2rem !important;
+    min-width: 180px !important;
+    box-shadow: 0 8px 24px rgba(25, 118, 210, 0.4) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.save-btn:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 12px 32px rgba(25, 118, 210, 0.6) !important;
+}
+
+.save-btn:active {
+    transform: translateY(-1px) !important;
+}
+
+.reset-btn {
+    border-radius: 16px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    padding: 0.75rem 2rem !important;
+    min-width: 180px !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.reset-btn:hover {
+    transform: translateY(-2px) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Dark mode specific adjustments */
+.body--dark .configure-section {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.01) 100%);
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+.body--dark .configure-section:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.body--dark .info-tip {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.08) 0%, rgba(255, 193, 7, 0.03) 100%);
+    border-color: rgba(255, 193, 7, 0.15);
+}
+
+/* Animation for section loading */
+.configure-section {
+    animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.configure-section:nth-child(2) {
+    animation-delay: 0.1s;
+}
+
+.configure-section:nth-child(3) {
+    animation-delay: 0.2s;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive adjustments for configure page */
+@media (max-width: 768px) {
+    .configure-card {
+        margin: 0 1rem;
+        border-radius: 16px !important;
+    }
+    
+    .configure-actions .q-btn {
+        width: 100% !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    .configure-actions .row {
+        flex-direction: column !important;
+}
+
+/* Configure dialog styles */
+.configure-dialog {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2) !important;
+    padding: 2rem !important;
+}
+
+.reset-cancel-btn {
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1.5rem !important;
+    transition: all 0.3s ease !important;
+}
+
+.reset-confirm-btn {
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1.5rem !important;
+    background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%) !important;
+    transition: all 0.3s ease !important;
+}
+
+.reset-confirm-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 16px rgba(244, 67, 54, 0.4) !important;
+}
+}

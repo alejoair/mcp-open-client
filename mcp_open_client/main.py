@@ -30,6 +30,8 @@ from mcp_open_client.config_utils import load_initial_config_from_files
 # Load the external CSS file from settings directory with cache busting
 ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
 
+# All CSS styles are now in the external CSS file
+
         
 
 def init_storage():
@@ -39,24 +41,43 @@ def init_storage():
         app.storage.browser['dark_mode'] = True
     ui.dark_mode().bind_value(app.storage.browser, 'dark_mode')
     
-    print("Loading initial configuration from files")
-    initial_configs = load_initial_config_from_files()
-
-    # Copy all configurations to user storage
-    for key, config in initial_configs.items():
-        app.storage.user[key] = config
-        print(f"Initialized {key} in user storage")
+    # Check if this is the first run (no user config exists)
+    has_existing_config = 'user-settings' in app.storage.user and app.storage.user['user-settings']
     
-    # user-settings is already loaded above in the loop
+    if not has_existing_config:
+        print("First run detected - Loading initial configuration from files")
+        initial_configs = load_initial_config_from_files()
 
-    print("Configuration migration complete - future changes will be stored in user storage only")
-
+        # Copy all configurations to user storage (only on first run)
+        for key, config in initial_configs.items():
+            app.storage.user[key] = config
+            print(f"Initialized {key} in user storage with: {config}")
+        
+        print("Configuration migration complete - future changes will be stored in user storage only")
+    else:
+        print("Existing user configuration found - preserving user settings")
+        print(f"Current user-settings: {app.storage.user.get('user-settings', {})}")
+    
+    # Always load initial configs for fallback purposes
+    if 'initial_configs' not in locals():
+        initial_configs = load_initial_config_from_files()
+    
     # Ensure required keys exist with defaults if somehow missing
     if 'user-settings' not in app.storage.user:
-        app.storage.user['user-settings'] = initial_configs.get("user-settings", {})
+        app.storage.user['user-settings'] = initial_configs.get("user-settings", {
+            'api_key': '',
+            'base_url': 'http://192.168.58.101:8123',
+            'model': 'claude-3-5-sonnet',
+            'system_prompt': 'You are a helpful assistant.'
+        })
+        print("Created default user-settings")
 
     if 'mcp-config' not in app.storage.user:
-        app.storage.user['mcp-config'] = initial_configs.get("mcp-config", {})
+        app.storage.user['mcp-config'] = initial_configs.get("mcp-config", {"mcpServers": {}})
+        print("Created default mcp-config")
+    
+    # Debug: Print final user settings
+    print(f"Final user-settings in storage: {app.storage.user.get('user-settings', 'NOT FOUND')}")
         
 
 async def init_mcp_client():
@@ -287,16 +308,16 @@ def setup_ui():
         global current_update_content_function
         current_update_content_function = update_content
         
-        with ui.header(elevated=True).classes('app-header'):
-            with ui.row().classes('items-center full-width no-wrap'):
-                with ui.row().classes('items-center no-wrap'):
-                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn q-mr-sm')
-                    ui.label('MCP-Open-Client').classes('app-title text-h5')
+        with ui.header(elevated=False).classes('app-header').style('background: #37474f; height: 64px; min-height: 64px; max-height: 64px;'):
+            with ui.row().classes('items-center full-width no-wrap').style('height: 64px; padding: 0 12px; margin: 0; box-sizing: border-box;'):
+                with ui.row().classes('items-center no-wrap gap-2').style('align-items: center;'):
+                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn').props('flat dense')
+                    ui.label('MCP-Open-Client').classes('app-title text-subtitle1').style('color: #e0e0e0; font-weight: 500; margin: 0; line-height: 1.2;')
                 
                 ui.space()
                 
-                with ui.row().classes('header-actions items-center no-wrap'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').tooltip('User Account')
+                with ui.row().classes('header-actions items-center no-wrap').style('align-items: center;'):
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').style('color: #e0e0e0;').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')

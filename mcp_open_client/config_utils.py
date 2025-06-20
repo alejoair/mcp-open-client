@@ -23,6 +23,23 @@ def load_initial_config_from_files():
             print(f"Base URL: {user_settings_file.get('base_url', 'Not found')}")
     except Exception as e:
         print(f"Warning: Could not load user settings: {str(e)}")
+        # Provide default user settings if file doesn't exist
+        configs_loaded['user-settings'] = {
+            'api_key': '',
+            'base_url': 'http://192.168.58.101:8123',
+            'model': 'claude-3-5-sonnet'
+        }
+        print("Using default user settings")
 
+    # Ensure both configs are always present
+    if 'user-settings' not in configs_loaded:
+        configs_loaded['user-settings'] = {
+            'api_key': '',
+            'base_url': 'http://192.168.58.101:8123',
+            'model': 'claude-3-5-sonnet'
+        }
+    
+    if 'mcp-config' not in configs_loaded:
+        configs_loaded['mcp-config'] = {"mcpServers": {}}
     
     return configs_loaded

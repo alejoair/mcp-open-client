@@ -15,24 +15,7 @@ def create_chat_interface(container):
     # Create an instance of APIClient
     api_client = APIClient()
     
-    # Apply CSS for proper layout expansion and code styling
-    ui.add_css('''
-        a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}
-        .nicegui-code {
-            border-radius: 8px !important;
-            margin: 8px 0 !important;
-            font-size: 14px !important;
-        }
-        .q-card {
-            border-radius: 12px !important;
-        }
-        .q-field__control {
-            border-radius: 12px !important;
-        }
-        .q-field--outlined .q-field__control {
-            border-radius: 12px !important;
-        }
-    ''')
+    # All CSS styles are now in the external CSS file
     
     # Make the page content expand properly
     ui.query('.q-page').classes('flex')
@@ -68,21 +51,19 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('chat-input-area w-full items-end gap-3 shrink-0'):
-                    text_input = ui.textarea(placeholder='Type your message... (Press Enter to send)').props('rounded outlined autogrow input-style="max-height: 120px"').classes('mobile-textarea flex-grow')
+                with ui.row().classes('w-full items-center gap-3 shrink-0').style('padding: 12px;'):
+                    text_input = ui.textarea(placeholder='Type your message...').props('rounded outlined autogrow input-style="max-height: 120px;"').classes('mobile-textarea flex-grow').style('min-height: 48px;')
                     
                     # Create async wrapper functions for the event handlers
                     async def send_message():
                         if text_input.value and text_input.value.strip():
                             await handle_send(text_input, message_container, api_client, scroll_area)
                     
-                    send_button = ui.button(icon='send', on_click=send_message).classes('send-button')
+                    send_button = ui.button(icon='send', on_click=send_message).classes('send-button').style('height: 48px; width: 48px; min-width: 48px; border-radius: 24px;').props('color=primary')
                     
                     # Enable sending with Enter key
                     text_input.on('keydown.enter', send_message)
                     
-                    # Add instructions for users
-                    ui.label('Press Enter to send, Shift+Enter for new line').classes('text-caption text-grey-6 q-mt-xs')
 
 
 def load_conversation_messages(message_container):

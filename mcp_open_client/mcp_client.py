@@ -6,6 +6,7 @@ from fastmcp import Client
 from fastmcp.exceptions import McpError, ClientError
 import mcp.types
 import traceback
+from .termux_workaround import apply_termux_workaround, setup_termux_environment, is_termux, is_android
 
 # Type alias for progress handler
 ProgressHandler = Callable[[float, str], None]
@@ -35,6 +36,14 @@ class MCPClientManager:
         
         try:
             self._initializing = True
+            
+            # Apply Termux workaround if needed
+            if is_termux() or is_android():
+                print("Detected Termux/Android environment, applying compatibility workaround...")
+                setup_termux_environment()
+                config = apply_termux_workaround(config)
+                print(f"Applied Termux workaround. Modified config: {json.dumps(config, indent=2)}")
+            
             self.config = config
             
             print(f"Starting MCP client initialization with config: {json.dumps(config, indent=2)}")

@@ -28,6 +28,7 @@ class APIClient:
         self.base_url = None
         self.api_key = None
         self.model = None
+        self.system_prompt = None
         self.max_retries = max_retries
         self.timeout = timeout
         self._client = None
@@ -42,8 +43,9 @@ class APIClient:
         self.base_url = user_settings.get('base_url')
         self.api_key = user_settings.get('api_key')
         self.model = user_settings.get('model')
+        self.system_prompt = user_settings.get('system_prompt', 'You are a helpful assistant.')
         
-        logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}, API Key: {'[SET]' if self.api_key else '[NOT SET]'}")
+        logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}, API Key: {'[SET]' if self.api_key else '[NOT SET]'}, System Prompt: {'[SET]' if self.system_prompt else '[DEFAULT]'}")
         
         # Validate that we have the minimum required settings
         if not self.base_url or not self.model:
@@ -95,6 +97,7 @@ class APIClient:
         presence_penalty: Optional[float] = None,
         stop: Optional[Union[str, List[str]]] = None,
         stream: bool = False,
+        system_prompt: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -110,6 +113,7 @@ class APIClient:
             presence_penalty: Presence penalty parameter
             stop: Stop sequences
             stream: Whether to stream the response
+            system_prompt: System prompt to use (overrides instance default)
             **kwargs: Additional parameters to pass to the API
             
         Returns:
@@ -120,12 +124,21 @@ class APIClient:
         """
         try:
             model_to_use = model or self.model
+            system_prompt_to_use = system_prompt or self.system_prompt
             logger.info(f"Creating chat completion with model: {model_to_use}")
+            
+            # Prepare messages with system prompt if provided
+            prepared_messages = messages.copy()
+            if system_prompt_to_use and (not prepared_messages or prepared_messages[0].get('role') != 'system'):
+                prepared_messages.insert(0, {'role': 'system', 'content': system_prompt_to_use})
+            elif system_prompt_to_use and prepared_messages and prepared_messages[0].get('role') == 'system':
+                # Update existing system message
+                prepared_messages[0]['content'] = system_prompt_to_use
             
             # Prepare parameters, filtering out None values
             params = {
                 "model": model_to_use,
-                "messages": messages,
+                "messages": prepared_messages,
                 "temperature": temperature,
                 "stream": stream,
                 **{k: v for k, v in {
