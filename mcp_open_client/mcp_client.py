@@ -46,7 +46,6 @@ class MCPClientManager:
             
             self.config = config
             
-            print(f"Starting MCP client initialization with config: {json.dumps(config, indent=2)}")
             
             # Create a new client with the current configuration
             if "mcpServers" in config and config["mcpServers"]:
@@ -64,7 +63,6 @@ class MCPClientManager:
                     
                     # Use FastMCP's standard MCP configuration format
                     mcp_config = {"mcpServers": active_servers}
-                    print(f"Creating FastMCP client with config: {json.dumps(mcp_config, indent=2)}")
                     
                     try:
                         # Create the client - FastMCP handles all transport logic automatically

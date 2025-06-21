@@ -136,7 +136,6 @@ async def get_available_tools() -> List[Dict[str, Any]]:
         # Get tools from MCP client manager
         mcp_tools = await mcp_client_manager.list_tools()
         print(f"DEBUG: Retrieved {len(mcp_tools) if mcp_tools else 0} MCP tools")
-        logger.info(f"Raw MCP tools: {mcp_tools}")
         
         if not mcp_tools:
             logger.info("No MCP tools available")

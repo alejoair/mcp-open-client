@@ -1,7 +1,7 @@
 from nicegui import ui, app
 import asyncio
 import json
-import sys
+import os
 
 # Import UI components
 from mcp_open_client.ui.home import show_content as show_home_content
@@ -27,12 +27,6 @@ from mcp_open_client.ui.chat_handlers import (
 # Import config utilities
 from mcp_open_client.config_utils import load_initial_config_from_files
 
-# Load the external CSS file from settings directory with cache busting
-ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
-
-# All CSS styles are now in the external CSS file
-
-        
 
 def init_storage():
     """Initialize storage - load from files only on first run"""
@@ -87,7 +81,6 @@ async def init_mcp_client():
         app.storage.user.mcp_initializing = True
         try:
             config = app.storage.user.get('mcp-config', {})
-            print(f"Initializing MCP client with config: {json.dumps(config, indent=2)}")
             
             if not config or 'mcpServers' not in config:
                 raise ValueError("Invalid MCP configuration - missing mcpServers section")
@@ -251,16 +244,16 @@ def delete_conversation_with_confirm(conversation_id: str):
 
 def setup_ui():
     """Setup the UI components"""
+    
     @ui.page('/')
     def index():
         """Main application page"""
-        
         # Add mobile viewport meta tag
         ui.add_head_html('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">')
         ui.add_head_html('<meta name="mobile-web-app-capable" content="yes">')
         ui.add_head_html('<meta name="apple-mobile-web-app-capable" content="yes">')
         ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
-        
+        ui.add_css(os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css'))
         # Initialize storage first
         init_storage()
         
@@ -315,16 +308,16 @@ def setup_ui():
         global current_update_content_function
         current_update_content_function = update_content
         
-        with ui.header(elevated=False).classes('app-header').style('background: #37474f; height: 64px; min-height: 64px; max-height: 64px;'):
-            with ui.row().classes('items-center full-width no-wrap').style('height: 64px; padding: 0 12px; margin: 0; box-sizing: border-box;'):
-                with ui.row().classes('items-center no-wrap gap-2').style('align-items: center;'):
+        with ui.header(elevated=False).classes('app-header'):
+            with ui.row().classes('items-center full-width no-wrap header-row'):
+                with ui.row().classes('items-center no-wrap gap-2 header-left'):
                     ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn').props('flat dense')
-                    ui.label('MCP-Open-Client').classes('app-title text-subtitle1').style('color: #e0e0e0; font-weight: 500; margin: 0; line-height: 1.2;')
+                    ui.label('MCP-Open-Client').classes('app-title text-subtitle1')
                 
                 ui.space()
                 
-                with ui.row().classes('header-actions items-center no-wrap').style('align-items: center;'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').style('color: #e0e0e0;').props('flat dense').tooltip('User Account')
+                with ui.row().classes('header-actions items-center no-wrap'):
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')

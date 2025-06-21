@@ -35,7 +35,7 @@ def create_chat_interface(container):
                     with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
 
                         with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
-                            message_container = ui.column().classes('w-full gap-2 q-pa-md')
+                            message_container = ui.column().classes('w-full gap-2')
                             
                             # Load messages from current conversation
                             load_conversation_messages(message_container)
@@ -51,15 +51,15 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('w-full items-center gap-3 shrink-0').style('padding: 12px;'):
-                    text_input = ui.textarea(placeholder='Type your message...').props('rounded outlined autogrow input-style="max-height: 120px;"').classes('mobile-textarea flex-grow').style('min-height: 48px;')
+                with ui.row().classes('w-full items-center gap-3 shrink-0 p-2'):
+                    text_input = ui.textarea(placeholder='Type your message...').props('rounded outlined autogrow input-style="max-height: 120px;"').classes('flex-grow min-h-12')
                     
                     # Create async wrapper functions for the event handlers
                     async def send_message():
                         if text_input.value and text_input.value.strip():
                             await handle_send(text_input, message_container, api_client, scroll_area)
                     
-                    send_button = ui.button(icon='send', on_click=send_message).classes('send-button').style('height: 48px; width: 48px; min-width: 48px; border-radius: 24px;').props('color=primary')
+                    send_button = ui.button(icon='send', on_click=send_message).classes('h-12 w-12 min-w-12 rounded-full').props('color=primary')
                     
                     # Enable sending with Enter key
                     text_input.on('keydown.enter', send_message)

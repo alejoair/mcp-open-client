@@ -77,6 +77,15 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
 
+def find_tool_response(tool_call_id: str) -> Optional[str]:
+    """Find the tool response for a given tool call ID"""
+    messages = get_messages()
+    for msg in messages:
+        if (msg.get('role') == 'tool' and 
+            msg.get('tool_call_id') == tool_call_id):
+            return msg.get('content', '')
+    return None
+
 def render_message_to_ui(message: dict, message_container) -> None:
     """Render a single message to the UI"""
     role = message.get('role', 'user')
@@ -86,12 +95,12 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('user-message message-bubble ml-auto mb-4') as user_card:
-                ui.label('You:').classes('font-bold mb-2 text-white')
+            with ui.card().classes('user-message message-bubble ml-auto mb-4 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
+                ui.label('You:').classes('font-bold mb-2 text-blue-300')
                 parse_and_render_message(content, user_card)
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-4') as bot_card:
-                ui.label('Assistant:').classes('font-bold mb-2')
+            with ui.card().classes('assistant-message message-bubble mb-4 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
+                ui.label('Assistant:').classes('font-bold mb-2 text-gray-300')
                 if content:
                     parse_and_render_message(content, bot_card)
                 
@@ -103,29 +112,37 @@ def render_message_to_ui(message: dict, message_container) -> None:
                         tool_name = function_info.get('name', 'unknown')
                         tool_args = function_info.get('arguments', '{}')
                         
-                        with ui.expansion(f"🔧 Tool Call {i+1}: {tool_name}",
-                                        icon='build',
-                                        value=False).classes('w-full mb-4 border-l-4 border-blue-400 tool-expandable'):
-                            with ui.element('div').classes('tool-expandable-content'):
-                                ui.label('Function:').classes('font-semibold text-blue-300')
-                                ui.code(tool_name, language='text').classes('mb-2 json-content')
-                                ui.label('Arguments:').classes('font-semibold text-blue-300')
-                                try:
-                                    # Try to format JSON arguments nicely
-                                    formatted_args = json.dumps(json.loads(tool_args), indent=2)
-                                    ui.code(formatted_args, language='json').classes('json-content')
-                                except:
-                                    ui.code(tool_args, language='json').classes('json-content')
+                        # Find corresponding tool response
+                        tool_call_id = tool_call.get('id')
+                        tool_response = find_tool_response(tool_call_id) if tool_call_id else None
+                        
+                        with ui.expansion(f"{tool_name}",
+                                        icon=None,
+                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 mb-2 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"'):
+                            # Tool Call Section
+                            ui.label('Call:').classes('font-semibold text-blue-300 mt-2')
+                            ui.code(tool_name, language='text').classes('w-full overflow-x-auto mb-2')
+                            ui.label('Arguments:').classes('font-semibold text-blue-300')
+                            try:
+                                # Try to format JSON arguments nicely
+                                formatted_args = json.dumps(json.loads(tool_args), indent=2)
+                                ui.code(formatted_args, language='json').classes('w-full overflow-x-auto')
+                            except:
+                                ui.code(tool_args, language='json').classes('w-full overflow-x-auto')
+                            
+                            # Tool Response Section (if available)
+                            if tool_response:
+                                ui.separator().classes('my-3')
+                                ui.label('Response:').classes('font-semibold text-emerald-300')
+                                # Use HTML with strict width control to prevent horizontal expansion
+                                import html
+                                escaped_response = html.escape(tool_response)
+                                ui.html(f'''<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box;">
+                                    <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; width: 100%; max-width: 100%; margin: 0; padding: 0.5rem; background: transparent; font-family: monospace; font-size: 0.875rem; overflow: hidden; box-sizing: border-box;">{escaped_response}</pre>
+                                </div>''')
         elif role == 'tool':
-            # Extract tool name from content if possible, or use generic name
-            tool_name = "Tool Response"
-            
-            with ui.expansion(f"🔧 {tool_name}",
-                            icon='check_circle',
-                            value=False).classes('w-full mb-4 border-l-4 border-emerald-400 tool-expandable') as tool_expansion:
-                with ui.element('div').classes('tool-expandable-content'):
-                    ui.label('Response:').classes('font-semibold text-emerald-300')
-                    parse_and_render_message(content, tool_expansion)
+            # Skip individual tool messages - they're now grouped with assistant messages
+            pass
 
 def save_current_conversation() -> None:
     """Save current conversation to storage"""
@@ -187,16 +204,16 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
 def render_tool_call_and_result(chat_container, tool_call, tool_result):
     """Render tool call and result in the UI"""
     with chat_container:
-        with ui.card().classes('w-full mb-2 bg-yellow-100 tool-message'):
-            with ui.element('div').classes('tool-content'):
+        with ui.card().classes('w-full max-w-full mb-2 bg-yellow-100 overflow-hidden'):
+            with ui.element('div').classes('w-full max-w-full overflow-hidden p-2'):
                 ui.label('Tool Call:').classes('font-bold')
                 ui.markdown(f"**Name:** {tool_call['function']['name']}")
-                ui.code(tool_call['function']['arguments'], language='json').classes('json-content')
+                ui.code(tool_call['function']['arguments'], language='json').classes('w-full max-w-full overflow-x-auto')
         
-        with ui.card().classes('w-full mb-2 bg-green-100 tool-message'):
-            with ui.element('div').classes('tool-content'):
+        with ui.card().classes('w-full max-w-full mb-2 bg-green-100 overflow-hidden'):
+            with ui.element('div').classes('w-full max-w-full overflow-hidden p-2'):
                 ui.label('Tool Result:').classes('font-bold')
-                ui.code(json.dumps(tool_result, indent=2), language='json').classes('json-content')
+                ui.code(json.dumps(tool_result, indent=2), language='json').classes('w-full max-w-full overflow-x-auto')
 
 async def send_message_to_mcp(message: str, server_name: str, chat_container, message_input):
     """Send message to MCP server and handle response"""
@@ -254,17 +271,17 @@ async def send_message_to_mcp(message: str, server_name: str, chat_container, me
                 if 'content' in llm_response:
                     add_message('assistant', llm_response['content'])
                     with chat_container:
-                        ui.markdown(f"**AI:** {llm_response['content']}").classes('bg-blue-100 p-2 rounded-lg mb-2')
+                        ui.markdown(f"**AI:** {llm_response['content']}").classes('bg-blue-100 p-2 rounded-lg mb-2 max-w-full overflow-wrap-anywhere')
             else:
                 # Add assistant response to conversation
                 add_message('assistant', llm_response)
                 with chat_container:
-                    ui.markdown(f"**AI:** {llm_response}").classes('bg-blue-100 p-2 rounded-lg mb-2')
+                    ui.markdown(f"**AI:** {llm_response}").classes('bg-blue-100 p-2 rounded-lg mb-2 max-w-full overflow-wrap-anywhere')
         except Exception as llm_error:
             error_message = f'Error generating LLM response: {str(llm_error)}'
             add_message('assistant', error_message)
             with chat_container:
-                ui.markdown(f"**Error:** {error_message}").classes('bg-red-100 p-2 rounded-lg mb-2')
+                ui.markdown(f"**Error:** {error_message}").classes('bg-red-100 p-2 rounded-lg mb-2 max-w-full overflow-wrap-anywhere')
         
         # Remove spinner
         spinner_card.delete()
