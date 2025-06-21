@@ -28,7 +28,10 @@ from mcp_open_client.ui.chat_handlers import (
 from mcp_open_client.config_utils import load_initial_config_from_files
 
 # Load the external CSS file from settings directory with cache busting
-ui.add_css(f'mcp_open_client/settings/app-styles.css?v={__import__("time").time()}')
+# Force CSS reload with unique timestamp
+import time
+ui.add_css(f'mcp_open_client/settings/app-styles.css?v={int(time.time() * 1000)}')
+print(f"Loading CSS with cache buster: {int(time.time() * 1000)}")
 
 # All CSS styles are now in the external CSS file
 
@@ -251,6 +254,15 @@ def delete_conversation_with_confirm(conversation_id: str):
 
 def setup_ui():
     """Setup the UI components"""
+    
+    # Add a route to force CSS reload for debugging
+    @ui.page('/reload-css')
+    def reload_css():
+        """Force CSS reload - for debugging only"""
+        ui.add_head_html(f'<link rel="stylesheet" href="mcp_open_client/settings/app-styles.css?v={int(time.time() * 1000)}">')
+        ui.label(f'CSS reloaded with timestamp: {int(time.time() * 1000)}')
+        ui.button('Back to App', on_click=lambda: ui.open('/'))
+    
     @ui.page('/')
     def index():
         """Main application page"""
