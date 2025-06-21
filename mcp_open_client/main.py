@@ -37,6 +37,10 @@ css_timestamp = int(time.time() * 1000)
 css_path = 'mcp_open_client/settings/app-styles.css'
 css_url = f'{css_path}?v={css_timestamp}'
 
+# Also try absolute URL for CSS
+absolute_css_url = f'/static/{css_path}?v={css_timestamp}'
+print(f"Trying absolute CSS URL: {absolute_css_url}")
+
 print("="*50)
 print("CSS LOADING DEBUG INFO:")
 print(f"Timestamp: {css_timestamp}")
@@ -60,12 +64,26 @@ if os.path.exists(full_css_path):
     except Exception as e:
         print(f"Error reading CSS file: {e}")
 else:
-    print("❌ CSS FILE NOT FOUND!")
+    print("ERROR: CSS FILE NOT FOUND!")
 
-# Add the CSS
-print(f"🎨 Adding CSS to NiceGUI: {css_url}")
-ui.add_css(css_url)
-print(f"✅ CSS Added Successfully")
+# Read CSS file content and add it directly (correct way for ui.add_css)
+print(f"Reading CSS file content from: {full_css_path}")
+try:
+    with open(full_css_path, 'r', encoding='utf-8') as f:
+        css_content = f.read()
+    
+    print(f"CSS file read successfully. Content length: {len(css_content)} characters")
+    print(f"First 100 characters: {css_content[:100]}...")
+    
+    # Add CSS content directly to NiceGUI
+    print("Adding CSS content to NiceGUI using ui.add_css...")
+    ui.add_css(css_content)
+    print("SUCCESS: CSS content added to NiceGUI!")
+    
+except FileNotFoundError:
+    print(f"ERROR: CSS file not found at {full_css_path}")
+except Exception as e:
+    print(f"ERROR reading CSS file: {e}")
 print("="*50)
 
 # All CSS styles are now in the external CSS file
@@ -298,7 +316,7 @@ def setup_ui():
         css_reload_url = f'mcp_open_client/settings/app-styles.css?v={reload_timestamp}'
         
         print("\n" + "="*50)
-        print("🔄 CSS RELOAD ENDPOINT TRIGGERED:")
+        print("CSS RELOAD ENDPOINT TRIGGERED:")
         print(f"Reload Timestamp: {reload_timestamp}")
         print(f"Reload CSS URL: {css_reload_url}")
         
@@ -309,7 +327,7 @@ def setup_ui():
         
         # Also try adding via ui.add_css
         ui.add_css(css_reload_url)
-        print(f"✅ CSS Reload Complete")
+        print(f"CSS Reload Complete")
         print("="*50 + "\n")
         
         ui.label(f'CSS reloaded with timestamp: {reload_timestamp}')
@@ -321,7 +339,7 @@ def setup_ui():
     def index():
         """Main application page"""
         
-        print("\n" + "🏠 MAIN PAGE LOADING:")
+        print("\n" + "MAIN PAGE LOADING:")
         print(f"Current timestamp: {int(time.time() * 1000)}")
         print(f"CSS should be loaded with colors visible")
         print("Look for RED, GREEN, BLUE colors in the UI")
