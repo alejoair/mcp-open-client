@@ -95,6 +95,7 @@ body {
     scroll-behavior: smooth;
     box-sizing: border-box !important;
     width: 100% !important;
+    background: #ff0000 !important; /* ROJO TEMPORAL para verificar que se aplica */
 }
 
 .chat-input-area {
@@ -116,6 +117,7 @@ body {
     overflow-wrap: break-word !important;
     font-size: 0.9rem !important;   /* Reducido de 0.95rem a 0.9rem */
     line-height: 1.3 !important;    /* Reducido de 1.4 a 1.3 */
+    border: 3px solid #00ff00 !important; /* BORDER VERDE TEMPORAL */
 }
 
 .user-message {
@@ -513,6 +515,7 @@ a:link, a:visited {
 .nicegui-content {
     padding: 0 !important;
     margin: 0 !important;
+    background: #0000ff !important; /* AZUL TEMPORAL para ver si se aplica */
 }
 
 /* Specific overrides for Quasar classes */
