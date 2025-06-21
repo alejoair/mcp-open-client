@@ -35,7 +35,7 @@ def create_chat_interface(container):
                     with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
 
                         with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
-                            message_container = ui.column().classes('w-full gap-2 q-pa-md')
+                            message_container = ui.column().classes('w-full gap-2')
                             
                             # Load messages from current conversation
                             load_conversation_messages(message_container)
@@ -51,7 +51,7 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('w-full items-center gap-3 shrink-0').style('padding: 12px;'):
+                with ui.row().classes('w-full items-center gap-3 shrink-0').style('padding: 8px;'):
                     text_input = ui.textarea(placeholder='Type your message...').props('rounded outlined autogrow input-style="max-height: 120px;"').classes('mobile-textarea flex-grow').style('min-height: 48px;')
                     
                     # Create async wrapper functions for the event handlers

@@ -93,6 +93,8 @@ body {
     padding: 0 !important;       /* Sin padding */
     margin: 0 !important;        /* Sin margin */
     scroll-behavior: smooth;
+    box-sizing: border-box !important;
+    width: 100% !important;
 }
 
 .chat-input-area {
@@ -303,10 +305,6 @@ body {
         font-size: 1rem !important;
     }
     
-    .chat-messages {
-        padding: 0 !important;       /* Sin padding en tablet */
-    }
-    
     .chat-input-area {
         padding: 24px !important;
     }
@@ -359,77 +357,8 @@ body {
         outline-offset: 2px !important;
     }
     
-    /* Extra compact message bubbles for small screens */
-    .message-bubble {
-        margin: 6px 4px !important;     /* Margen compacto con separación lateral */
-        padding: 6px 10px !important;   /* Padding mínimo */
-        font-size: 0.85rem !important;  /* Texto más pequeño */
-        line-height: 1.2 !important;    /* Interlineado compacto */
-        max-width: 90% !important;      /* Más ancho en móvil */
-    }
-    
-    /* Chat messages extra compact */
-    .chat-messages {
-        padding: 0 !important;          /* Sin padding en móvil */
-    }
-    
-    /* Tool expandables extra compact */
-    .tool-expandable {
-        margin: 2px 0 !important;       /* Margin mínimo */
-        border-radius: 6px !important;  /* Bordes más pequeños */
-    }
-    
-    .tool-expandable-content {
-        padding: 6px !important;        /* Padding mínimo */
-        margin: 2px 0 !important;       /* Margin mínimo */
-        max-height: 200px !important;   /* Altura reducida para móvil */
-    }
-    
-    .json-content {
-        font-size: 10px !important;     /* Texto muy pequeño */
-        max-height: 100px !important;   /* Altura muy reducida */
-        padding: 4px !important;        /* Padding mínimo */
-    }
 }
 
-/* ====== EXTRA SMALL MOBILE OPTIMIZATION (< 480px) ====== */
-@media (max-width: 479px) {
-    /* Ultra compact for very small screens */
-    .message-bubble {
-        margin: 4px 2px !important;     /* Margen ultra compacto con separación lateral */
-        padding: 4px 8px !important;
-        font-size: 0.8rem !important;
-        line-height: 1.1 !important;
-        max-width: 95% !important;
-        border-radius: 8px !important;
-    }
-    
-    .chat-messages {
-        padding: 0 !important;          /* Sin padding en extra pequeño */
-    }
-    
-    .tool-expandable {
-        margin: 1px 0 !important;
-        border-radius: 4px !important;
-    }
-    
-    .tool-expandable-content {
-        padding: 4px !important;
-        margin: 1px 0 !important;
-        max-height: 150px !important;
-    }
-    
-    .json-content {
-        font-size: 9px !important;
-        max-height: 80px !important;
-        padding: 3px !important;
-    }
-    
-    /* Reduce chat input area padding */
-    .chat-input-area {
-        padding: 8px !important;
-    }
-}
 
 /* Prevent zoom on iOS when focusing inputs */
 @media screen and (-webkit-min-device-pixel-ratio: 0) {
@@ -571,6 +500,58 @@ a:link, a:visited {
 /* Send button improvements */
 .send-button {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+/* ====== CHAT LAYOUT ZERO PADDING OVERRIDE ====== */
+/* Force zero padding/margin on all chat containers */
+.q-tab-panel,
+.q-tab-panels,
+.q-tabs,
+.chat-container,
+.chat-messages,
+.q-page,
+.nicegui-content {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Specific overrides for Quasar classes */
+.q-pa-md,
+.q-pa-sm,
+.q-pa-lg,
+.q-pa-xl {
+    padding: 0 !important;
+}
+
+.q-ma-md,
+.q-ma-sm,
+.q-ma-lg,
+.q-ma-xl {
+    margin: 0 !important;
+}
+
+/* Message container specific */
+.message-container,
+[class*="q-pa"],
+[class*="q-ma"] {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Ensure scroll area has no padding */
+.q-scrollarea__content {
+    padding: 0 !important;
+}
+
+/* Override any gap classes to minimal spacing */
+.gap-2 {
+    gap: 2px !important;
+}
+
+/* Adjust message bubble margins for edge-to-edge layout */
+.message-bubble {
+    margin: 4px 2px !important;     /* Minimal margins */
+    max-width: 96% !important;      /* Nearly full width */
 }
 
 /* ====== TOOL CALL & TOOL RESPONSE STYLES ====== */
