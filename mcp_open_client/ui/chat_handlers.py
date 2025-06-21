@@ -105,25 +105,27 @@ def render_message_to_ui(message: dict, message_container) -> None:
                         
                         with ui.expansion(f"🔧 Tool Call {i+1}: {tool_name}",
                                         icon='build',
-                                        value=False).classes('w-full mb-4 border-l-4 border-blue-400'):
-                            ui.label('Function:').classes('font-semibold text-blue-300')
-                            ui.code(tool_name, language='text').classes('mb-2')
-                            ui.label('Arguments:').classes('font-semibold text-blue-300')
-                            try:
-                                # Try to format JSON arguments nicely
-                                formatted_args = json.dumps(json.loads(tool_args), indent=2)
-                                ui.code(formatted_args, language='json')
-                            except:
-                                ui.code(tool_args, language='json')
+                                        value=False).classes('w-full mb-4 border-l-4 border-blue-400 tool-expandable'):
+                            with ui.element('div').classes('tool-expandable-content'):
+                                ui.label('Function:').classes('font-semibold text-blue-300')
+                                ui.code(tool_name, language='text').classes('mb-2 json-content')
+                                ui.label('Arguments:').classes('font-semibold text-blue-300')
+                                try:
+                                    # Try to format JSON arguments nicely
+                                    formatted_args = json.dumps(json.loads(tool_args), indent=2)
+                                    ui.code(formatted_args, language='json').classes('json-content')
+                                except:
+                                    ui.code(tool_args, language='json').classes('json-content')
         elif role == 'tool':
             # Extract tool name from content if possible, or use generic name
             tool_name = "Tool Response"
             
             with ui.expansion(f"🔧 {tool_name}",
                             icon='check_circle',
-                            value=False).classes('w-full mb-4 border-l-4 border-emerald-400') as tool_expansion:
-                ui.label('Response:').classes('font-semibold text-emerald-300')
-                parse_and_render_message(content, tool_expansion)
+                            value=False).classes('w-full mb-4 border-l-4 border-emerald-400 tool-expandable') as tool_expansion:
+                with ui.element('div').classes('tool-expandable-content'):
+                    ui.label('Response:').classes('font-semibold text-emerald-300')
+                    parse_and_render_message(content, tool_expansion)
 
 def save_current_conversation() -> None:
     """Save current conversation to storage"""
@@ -185,14 +187,16 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
 def render_tool_call_and_result(chat_container, tool_call, tool_result):
     """Render tool call and result in the UI"""
     with chat_container:
-        with ui.card().classes('w-full mb-2 bg-yellow-100'):
-            ui.label('Tool Call:').classes('font-bold')
-            ui.markdown(f"**Name:** {tool_call['function']['name']}")
-            ui.markdown(f"**Arguments:**\n```json\n{tool_call['function']['arguments']}\n```")
+        with ui.card().classes('w-full mb-2 bg-yellow-100 tool-message'):
+            with ui.element('div').classes('tool-content'):
+                ui.label('Tool Call:').classes('font-bold')
+                ui.markdown(f"**Name:** {tool_call['function']['name']}")
+                ui.code(tool_call['function']['arguments'], language='json').classes('json-content')
         
-        with ui.card().classes('w-full mb-2 bg-green-100'):
-            ui.label('Tool Result:').classes('font-bold')
-            ui.markdown(f"```json\n{json.dumps(tool_result, indent=2)}\n```")
+        with ui.card().classes('w-full mb-2 bg-green-100 tool-message'):
+            with ui.element('div').classes('tool-content'):
+                ui.label('Tool Result:').classes('font-bold')
+                ui.code(json.dumps(tool_result, indent=2), language='json').classes('json-content')
 
 async def send_message_to_mcp(message: str, server_name: str, chat_container, message_input):
     """Send message to MCP server and handle response"""

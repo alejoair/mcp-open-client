@@ -24,7 +24,7 @@ class PostInstallCommand(install):
 
 setup(
     name="mcp-open-client",
-    version="0.4.0",
+    version="0.4.4",
     packages=find_packages(),
     include_package_data=True,
     install_requires=[

@@ -89,8 +89,15 @@ async def init_mcp_client():
             config = app.storage.user.get('mcp-config', {})
             print(f"Initializing MCP client with config: {json.dumps(config, indent=2)}")
             
-            if not config or not config.get('mcpServers'):
-                raise ValueError("Invalid or empty MCP configuration")
+            if not config or 'mcpServers' not in config:
+                raise ValueError("Invalid MCP configuration - missing mcpServers section")
+            
+            # Allow empty mcpServers configuration (no servers configured)
+            if not config.get('mcpServers'):
+                print("No MCP servers configured - this is valid, skipping MCP client initialization")
+                app.storage.user['mcp_status'] = "No MCP servers configured"
+                app.storage.user['mcp_status_color'] = 'info'
+                return
             
             success = await mcp_client_manager.initialize(config)
             

@@ -1,5 +1,6 @@
 from nicegui import ui, app
 import asyncio
+from mcp_open_client.config_utils import load_initial_config_from_files
 from mcp_open_client.mcp_client import mcp_client_manager
 
 # File operations removed - using only app.storage.user which is persistent
@@ -431,12 +432,15 @@ def show_content(container):
         
         # Function to reset configuration to default
         def reset_to_default():
-            """Reset the MCP configuration to default values"""
+            """Reset the MCP configuration to default values from files"""
             try:
-                # Set to empty default configuration
-                default_config = {"mcpServers": {}}
+                # Load initial configuration from files
+                initial_configs = load_initial_config_from_files()
+                default_config = initial_configs.get('mcp-config', {"mcpServers": {}})
                 
-                # Update the user storage with default configuration
+                print(f"Reset to default - MCP config loaded from files: {default_config}")
+                
+                # Update the user storage with default configuration from files
                 app.storage.user['mcp-config'] = default_config
                 
                 # Update the MCP client manager with the default configuration
