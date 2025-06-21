@@ -501,6 +501,141 @@ a:link, a:visited {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
 }
 
+/* ====== TOOL CALL & TOOL RESPONSE STYLES ====== */
+/* Tool expandable containers */
+.tool-expandable {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    margin: 8px 0 !important;
+    overflow: hidden !important;
+}
+
+.tool-expandable:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Tool expandable content with proper sizing */
+.tool-expandable-content {
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    padding: 12px !important;
+    background: rgba(0, 0, 0, 0.1) !important;
+    border-radius: 8px !important;
+    margin: 8px 0 !important;
+}
+
+/* Tool expandable content scrollbar */
+.tool-expandable-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.tool-expandable-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tool-expandable-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+.tool-expandable-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* JSON content styling within tool calls */
+.json-content {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 6px !important;
+    font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', 'Consolas', monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    word-wrap: break-word !important;
+    white-space: pre-wrap !important;
+}
+
+.json-content::-webkit-scrollbar {
+    width: 3px;
+}
+
+.json-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.json-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+}
+
+/* Tool message specific styling */
+.tool-message {
+    max-width: 90% !important;
+    margin: 8px auto !important;
+    border-radius: 12px !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.tool-content {
+    padding: 12px !important;
+}
+
+/* Expansion header styling */
+.tool-expandable .q-expansion-item__toggle {
+    padding: 12px 16px !important;
+    font-weight: 500 !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.tool-expandable .q-expansion-item__container {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+/* Tool call labels with colors */
+.tool-expandable .q-expansion-item__toggle[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Specific styles for different tool types */
+.tool-expandable.border-l-4.border-blue-400 {
+    border-left: 4px solid #60a5fa !important;
+}
+
+.tool-expandable.border-l-4.border-emerald-400 {
+    border-left: 4px solid #34d399 !important;
+}
+
+/* Dark mode adjustments for tools */
+.body--dark .tool-expandable {
+    background: rgba(255, 255, 255, 0.01) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.body--dark .tool-expandable:hover {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.body--dark .tool-expandable-content {
+    background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.body--dark .json-content {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+    color: #e2e8f0 !important;
+}
+
+.body--dark .tool-message {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
 /* ====== CONFIGURE PAGE STYLES ====== */
 /* Configure page header */
 .configure-header {
