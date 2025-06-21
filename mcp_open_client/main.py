@@ -1,7 +1,7 @@
 from nicegui import ui, app
 import asyncio
 import json
-import sys
+import os
 
 # Import UI components
 from mcp_open_client.ui.home import show_content as show_home_content
@@ -27,68 +27,6 @@ from mcp_open_client.ui.chat_handlers import (
 # Import config utilities
 from mcp_open_client.config_utils import load_initial_config_from_files
 
-# Load the external CSS file from settings directory with cache busting
-# Force CSS reload with unique timestamp
-import time
-import os
-
-# Enhanced logging for CSS loading
-css_timestamp = int(time.time() * 1000)
-css_path = 'mcp_open_client/settings/app-styles.css'
-css_url = f'{css_path}?v={css_timestamp}'
-
-# Also try absolute URL for CSS
-absolute_css_url = f'/static/{css_path}?v={css_timestamp}'
-print(f"Trying absolute CSS URL: {absolute_css_url}")
-
-print("="*50)
-print("CSS LOADING DEBUG INFO:")
-print(f"Timestamp: {css_timestamp}")
-print(f"CSS Path: {css_path}")
-print(f"CSS URL: {css_url}")
-
-# Check if the CSS file exists
-full_css_path = os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css')
-print(f"Full CSS Path: {full_css_path}")
-print(f"CSS File Exists: {os.path.exists(full_css_path)}")
-
-if os.path.exists(full_css_path):
-    file_size = os.path.getsize(full_css_path)
-    print(f"CSS File Size: {file_size} bytes")
-    
-    # Read first few lines to verify content
-    try:
-        with open(full_css_path, 'r', encoding='utf-8') as f:
-            first_lines = [f.readline().strip() for _ in range(3)]
-            print(f"CSS First Lines: {first_lines}")
-    except Exception as e:
-        print(f"Error reading CSS file: {e}")
-else:
-    print("ERROR: CSS FILE NOT FOUND!")
-
-# Read CSS file content and add it directly (correct way for ui.add_css)
-print(f"Reading CSS file content from: {full_css_path}")
-try:
-    with open(full_css_path, 'r', encoding='utf-8') as f:
-        css_content = f.read()
-    
-    print(f"CSS file read successfully. Content length: {len(css_content)} characters")
-    print(f"First 100 characters: {css_content[:100]}...")
-    
-    # Add CSS content directly to NiceGUI
-    print("Adding CSS content to NiceGUI using ui.add_css...")
-    ui.add_css(css_content)
-    print("SUCCESS: CSS content added to NiceGUI!")
-    
-except FileNotFoundError:
-    print(f"ERROR: CSS file not found at {full_css_path}")
-except Exception as e:
-    print(f"ERROR reading CSS file: {e}")
-print("="*50)
-
-# All CSS styles are now in the external CSS file
-
-        
 
 def init_storage():
     """Initialize storage - load from files only on first run"""
@@ -143,7 +81,6 @@ async def init_mcp_client():
         app.storage.user.mcp_initializing = True
         try:
             config = app.storage.user.get('mcp-config', {})
-            print(f"Initializing MCP client with config: {json.dumps(config, indent=2)}")
             
             if not config or 'mcpServers' not in config:
                 raise ValueError("Invalid MCP configuration - missing mcpServers section")
@@ -308,48 +245,15 @@ def delete_conversation_with_confirm(conversation_id: str):
 def setup_ui():
     """Setup the UI components"""
     
-    # Add a route to force CSS reload for debugging
-    @ui.page('/reload-css')
-    def reload_css():
-        """Force CSS reload - for debugging only"""
-        reload_timestamp = int(time.time() * 1000)
-        css_reload_url = f'mcp_open_client/settings/app-styles.css?v={reload_timestamp}'
-        
-        print("\n" + "="*50)
-        print("CSS RELOAD ENDPOINT TRIGGERED:")
-        print(f"Reload Timestamp: {reload_timestamp}")
-        print(f"Reload CSS URL: {css_reload_url}")
-        
-        # Add CSS via head HTML
-        css_html = f'<link rel="stylesheet" href="{css_reload_url}">'
-        print(f"Adding CSS HTML: {css_html}")
-        ui.add_head_html(css_html)
-        
-        # Also try adding via ui.add_css
-        ui.add_css(css_reload_url)
-        print(f"CSS Reload Complete")
-        print("="*50 + "\n")
-        
-        ui.label(f'CSS reloaded with timestamp: {reload_timestamp}')
-        ui.label(f'CSS URL: {css_reload_url}')
-        ui.button('Back to App', on_click=lambda: ui.open('/'))
-        ui.button('Reload Again', on_click=lambda: ui.open('/reload-css'))
-    
     @ui.page('/')
     def index():
         """Main application page"""
-        
-        print("\n" + "MAIN PAGE LOADING:")
-        print(f"Current timestamp: {int(time.time() * 1000)}")
-        print(f"CSS should be loaded with colors visible")
-        print("Look for RED, GREEN, BLUE colors in the UI")
-        
         # Add mobile viewport meta tag
         ui.add_head_html('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">')
         ui.add_head_html('<meta name="mobile-web-app-capable" content="yes">')
         ui.add_head_html('<meta name="apple-mobile-web-app-capable" content="yes">')
         ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
-        
+        ui.add_css(os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css'))
         # Initialize storage first
         init_storage()
         
