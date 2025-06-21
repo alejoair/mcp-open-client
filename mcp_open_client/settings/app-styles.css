@@ -90,7 +90,8 @@ body {
 .chat-messages {
     flex: 1 !important;
     overflow-y: auto !important;
-    padding: 8px !important;     /* Reducido de 16px a 8px */
+    padding: 0 !important;       /* Sin padding */
+    margin: 0 !important;        /* Sin margin */
     scroll-behavior: smooth;
 }
 
@@ -106,7 +107,7 @@ body {
 /* Message Bubbles Mobile */
 .message-bubble {
     max-width: 85% !important;
-    margin-bottom: 8px !important;  /* Reducido de 16px a 8px */
+    margin: 8px 6px !important;     /* Agregado margen horizontal para separar de bordes */
     padding: 8px 12px !important;   /* Reducido de 12px 16px a 8px 12px */
     border-radius: 12px !important; /* Reducido de 16px a 12px */
     word-wrap: break-word !important;
@@ -303,7 +304,7 @@ body {
     }
     
     .chat-messages {
-        padding: 24px !important;
+        padding: 0 !important;       /* Sin padding en tablet */
     }
     
     .chat-input-area {
@@ -360,7 +361,7 @@ body {
     
     /* Extra compact message bubbles for small screens */
     .message-bubble {
-        margin-bottom: 6px !important;  /* Aún más compacto en móvil */
+        margin: 6px 4px !important;     /* Margen compacto con separación lateral */
         padding: 6px 10px !important;   /* Padding mínimo */
         font-size: 0.85rem !important;  /* Texto más pequeño */
         line-height: 1.2 !important;    /* Interlineado compacto */
@@ -369,7 +370,7 @@ body {
     
     /* Chat messages extra compact */
     .chat-messages {
-        padding: 4px !important;        /* Padding mínimo */
+        padding: 0 !important;          /* Sin padding en móvil */
     }
     
     /* Tool expandables extra compact */
@@ -395,7 +396,7 @@ body {
 @media (max-width: 479px) {
     /* Ultra compact for very small screens */
     .message-bubble {
-        margin-bottom: 4px !important;
+        margin: 4px 2px !important;     /* Margen ultra compacto con separación lateral */
         padding: 4px 8px !important;
         font-size: 0.8rem !important;
         line-height: 1.1 !important;
@@ -404,7 +405,7 @@ body {
     }
     
     .chat-messages {
-        padding: 2px !important;
+        padding: 0 !important;          /* Sin padding en extra pequeño */
     }
     
     .tool-expandable {
