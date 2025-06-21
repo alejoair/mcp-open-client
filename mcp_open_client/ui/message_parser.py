@@ -45,7 +45,7 @@ def parse_and_render_message(message: str, container) -> None:
                     ui.markdown(text_before)
             # Render code block
             if code_content:
-                ui.code(code_content, language=language).classes('w-full my-2 nicegui-code')
+                ui.code(code_content, language=language).classes('w-full my-2 overflow-x-auto')
             
             
             last_end = end

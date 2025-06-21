@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-open-client"
-version = "0.4.4"
+version = "0.4.5"
 description = "MCP Open Client - A NiceGUI-based chat application for Claude"
 authors = [{name = "alejoair", email = "your.email@example.com"}]
 license = {text = "MIT"}

@@ -308,16 +308,16 @@ def setup_ui():
         global current_update_content_function
         current_update_content_function = update_content
         
-        with ui.header(elevated=False).classes('app-header').style('background: #37474f; height: 64px; min-height: 64px; max-height: 64px;'):
-            with ui.row().classes('items-center full-width no-wrap').style('height: 64px; padding: 0 12px; margin: 0; box-sizing: border-box;'):
-                with ui.row().classes('items-center no-wrap gap-2').style('align-items: center;'):
+        with ui.header(elevated=False).classes('app-header'):
+            with ui.row().classes('items-center full-width no-wrap header-row'):
+                with ui.row().classes('items-center no-wrap gap-2 header-left'):
                     ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn').props('flat dense')
-                    ui.label('MCP-Open-Client').classes('app-title text-subtitle1').style('color: #e0e0e0; font-weight: 500; margin: 0; line-height: 1.2;')
+                    ui.label('MCP-Open-Client').classes('app-title text-subtitle1')
                 
                 ui.space()
                 
-                with ui.row().classes('header-actions items-center no-wrap').style('align-items: center;'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').style('color: #e0e0e0;').props('flat dense').tooltip('User Account')
+                with ui.row().classes('header-actions items-center no-wrap'):
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
