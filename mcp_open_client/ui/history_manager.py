@@ -5,7 +5,6 @@ History Manager - Sistema de gestión y limitación del historial de conversacio
 import json
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-from nicegui import app
 
 
 class HistoryManager:
@@ -152,16 +151,17 @@ class HistoryManager:
         
         return processed_message
     
-    def get_conversation_size(self, conversation_id: str) -> Dict[str, int]:
+    def get_conversation_size(self, conversation_id: str, conversations: Dict[str, Any] = None) -> Dict[str, int]:
         """
         Calcula el tamaño de una conversación
         
         Returns:
             Dict con 'total_chars', 'message_count', 'avg_message_size'
         """
-        from .chat_handlers import get_conversation_storage
+        if conversations is None:
+            from .chat_handlers import get_conversation_storage
+            conversations = get_conversation_storage()
         
-        conversations = get_conversation_storage()
         if conversation_id not in conversations:
             return {'total_chars': 0, 'message_count': 0, 'avg_message_size': 0}
         
@@ -246,6 +246,8 @@ class HistoryManager:
         if len(messages_to_keep) < len(messages):
             conversations[conversation_id]['messages'] = messages_to_keep
             conversations[conversation_id]['_cleaned_at'] = datetime.now().isoformat()
+            # Update storage through chat_handlers
+            from nicegui import app
             app.storage.user['conversations'] = conversations
             return True
         
@@ -286,6 +288,7 @@ class HistoryManager:
             conversations_removed += 1
         
         if conversations_removed > 0:
+            from nicegui import app
             app.storage.user['conversations'] = conversations
         
         new_stats = self.get_total_history_size()

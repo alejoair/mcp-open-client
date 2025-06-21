@@ -123,4 +123,97 @@ def create_history_settings_ui(container):
                 
                 async def cleanup_all_history():
                     result = history_manager.cleanup_history_if_needed()
-                    if result['cleaned']:\n                        ui.notify(f\"Cleaned up {result['conversations_removed']} conversations\", type='positive')\n                        refresh_stats()\n                    else:\n                        ui.notify('History is within limits', type='info')\n                \n                ui.button(\n                    'Cleanup Current Conversation',\n                    icon='cleaning_services',\n                    on_click=cleanup_current_conversation\n                ).classes('').props('color=orange')\n                \n                ui.button(\n                    'Cleanup All History',\n                    icon='delete_sweep',\n                    on_click=cleanup_all_history\n                ).classes('').props('color=red')\n        \n        # Botones de acción\n        with ui.row().classes('w-full justify-end gap-4 mt-6'):\n            def save_settings():\n                try:\n                    history_manager.update_settings(\n                        max_chars_per_message=int(max_chars_per_message.value),\n                        max_chars_per_conversation=int(max_chars_per_conversation.value),\n                        max_total_chars=int(max_total_chars.value),\n                        truncate_mode=truncate_mode.value,\n                        preserve_tool_calls=preserve_tool_calls.value,\n                        auto_cleanup=auto_cleanup.value,\n                        compression_enabled=compression_enabled.value\n                    )\n                    ui.notify('Settings saved successfully!', type='positive')\n                    refresh_stats()\n                except Exception as e:\n                    ui.notify(f'Error saving settings: {str(e)}', type='negative')\n            \n            def reset_to_defaults():\n                max_chars_per_message.value = 5000\n                max_chars_per_conversation.value = 50000\n                max_total_chars.value = 500000\n                truncate_mode.value = 'smart'\n                preserve_tool_calls.value = True\n                auto_cleanup.value = True\n                compression_enabled.value = True\n                ui.notify('Settings reset to defaults', type='info')\n            \n            def refresh_stats():\n                # Refrescar estadísticas\n                new_stats = history_manager.get_total_history_size()\n                # Aquí podrías actualizar los elementos de la UI si necesario\n                pass\n            \n            ui.button('Reset to Defaults', icon='restore', on_click=reset_to_defaults).props('flat')\n            ui.button('Save Settings', icon='save', on_click=save_settings).props('color=primary')\n\n\ndef create_conversation_details_ui(container, conversation_id: str):\n    \"\"\"\n    Crea una interfaz detallada para una conversación específica\n    \"\"\"\n    with container:\n        ui.label(f'Conversation Details: {conversation_id[:8]}...').classes('text-xl font-bold mb-4')\n        \n        stats = history_manager.get_conversation_size(conversation_id)\n        \n        with ui.grid(columns=3).classes('w-full gap-4 mb-4'):\n            with ui.card().classes('p-4 text-center'):\n                ui.label(f\"{stats['total_chars']:,}\").classes('text-xl font-bold text-blue-600')\n                ui.label('Total Characters').classes('text-sm text-gray-600')\n            \n            with ui.card().classes('p-4 text-center'):\n                ui.label(f\"{stats['message_count']:,}\").classes('text-xl font-bold text-green-600')\n                ui.label('Messages').classes('text-sm text-gray-600')\n            \n            with ui.card().classes('p-4 text-center'):\n                ui.label(f\"{stats['avg_message_size']:,}\").classes('text-xl font-bold text-purple-600')\n                ui.label('Avg. Message Size').classes('text-sm text-gray-600')\n        \n        # Progreso hacia los límites\n        with ui.card().classes('w-full p-4'):\n            ui.label('Limits Progress').classes('text-lg font-semibold mb-3')\n            \n            settings = history_manager.get_settings()\n            \n            # Progreso de caracteres por conversación\n            conv_progress = min(100, (stats['total_chars'] / settings['max_chars_per_conversation']) * 100)\n            ui.label(f\"Conversation Size: {conv_progress:.1f}% of limit\")\n            ui.linear_progress(value=conv_progress/100).classes('mb-2')\n            \n            # Progreso total\n            total_stats = history_manager.get_total_history_size()\n            total_progress = min(100, (total_stats['total_chars'] / settings['max_total_chars']) * 100)\n            ui.label(f\"Total History Size: {total_progress:.1f}% of limit\")\n            ui.linear_progress(value=total_progress/100)\n
+                    if result['cleaned']:
+                        ui.notify(f"Cleaned up {result['conversations_removed']} conversations", type='positive')
+                        refresh_stats()
+                    else:
+                        ui.notify('History is within limits', type='info')
+                
+                ui.button(
+                    'Cleanup Current Conversation',
+                    icon='cleaning_services',
+                    on_click=cleanup_current_conversation
+                ).classes('').props('color=orange')
+                
+                ui.button(
+                    'Cleanup All History',
+                    icon='delete_sweep',
+                    on_click=cleanup_all_history
+                ).classes('').props('color=red')
+        
+        # Botones de acción
+        with ui.row().classes('w-full justify-end gap-4 mt-6'):
+            def save_settings():
+                try:
+                    history_manager.update_settings(
+                        max_chars_per_message=int(max_chars_per_message.value),
+                        max_chars_per_conversation=int(max_chars_per_conversation.value),
+                        max_total_chars=int(max_total_chars.value),
+                        truncate_mode=truncate_mode.value,
+                        preserve_tool_calls=preserve_tool_calls.value,
+                        auto_cleanup=auto_cleanup.value,
+                        compression_enabled=compression_enabled.value
+                    )
+                    ui.notify('Settings saved successfully!', type='positive')
+                    refresh_stats()
+                except Exception as e:
+                    ui.notify(f'Error saving settings: {str(e)}', type='negative')
+            
+            def reset_to_defaults():
+                max_chars_per_message.value = 5000
+                max_chars_per_conversation.value = 50000
+                max_total_chars.value = 500000
+                truncate_mode.value = 'smart'
+                preserve_tool_calls.value = True
+                auto_cleanup.value = True
+                compression_enabled.value = True
+                ui.notify('Settings reset to defaults', type='info')
+            
+            def refresh_stats():
+                # Refrescar estadísticas
+                new_stats = history_manager.get_total_history_size()
+                # Aquí podrías actualizar los elementos de la UI si necesario
+                pass
+            
+            ui.button('Reset to Defaults', icon='restore', on_click=reset_to_defaults).props('flat')
+            ui.button('Save Settings', icon='save', on_click=save_settings).props('color=primary')
+
+
+def create_conversation_details_ui(container, conversation_id: str):
+    """
+    Crea una interfaz detallada para una conversación específica
+    """
+    with container:
+        ui.label(f'Conversation Details: {conversation_id[:8]}...').classes('text-xl font-bold mb-4')
+        
+        stats = history_manager.get_conversation_size(conversation_id)
+        
+        with ui.grid(columns=3).classes('w-full gap-4 mb-4'):
+            with ui.card().classes('p-4 text-center'):
+                ui.label(f"{stats['total_chars']:,}").classes('text-xl font-bold text-blue-600')
+                ui.label('Total Characters').classes('text-sm text-gray-600')
+            
+            with ui.card().classes('p-4 text-center'):
+                ui.label(f"{stats['message_count']:,}").classes('text-xl font-bold text-green-600')
+                ui.label('Messages').classes('text-sm text-gray-600')
+            
+            with ui.card().classes('p-4 text-center'):
+                ui.label(f"{stats['avg_message_size']:,}").classes('text-xl font-bold text-purple-600')
+                ui.label('Avg. Message Size').classes('text-sm text-gray-600')
+        
+        # Progreso hacia los límites
+        with ui.card().classes('w-full p-4'):
+            ui.label('Limits Progress').classes('text-lg font-semibold mb-3')
+            
+            settings = history_manager.get_settings()
+            
+            # Progreso de caracteres por conversación
+            conv_progress = min(100, (stats['total_chars'] / settings['max_chars_per_conversation']) * 100)
+            ui.label(f"Conversation Size: {conv_progress:.1f}% of limit")
+            ui.linear_progress(value=conv_progress/100).classes('mb-2')
+            
+            # Progreso total
+            total_stats = history_manager.get_total_history_size()
+            total_progress = min(100, (total_stats['total_chars'] / settings['max_total_chars']) * 100)
+            ui.label(f"Total History Size: {total_progress:.1f}% of limit")
+            ui.linear_progress(value=total_progress/100)
