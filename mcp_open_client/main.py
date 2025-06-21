@@ -13,6 +13,7 @@ def get_show_configure_content():
 
 # Use get_show_configure_content() when you need to call show_content
 from mcp_open_client.ui.chat_window import show_content as show_chat_content
+from mcp_open_client.ui.history_settings import create_history_settings_ui
 
 # Import MCP client manager
 from mcp_open_client.mcp_client import mcp_client_manager
@@ -303,6 +304,8 @@ def setup_ui():
                 get_show_configure_content()(content_container)
             elif section == 'chat':
                 show_chat_content(content_container)
+            elif section == 'history_settings':
+                create_history_settings_ui(content_container)
         
         # Make update_content available globally
         global current_update_content_function
@@ -359,6 +362,17 @@ def setup_ui():
                     'flat no-caps align-left full-width'
                 ).classes(
                     f'drawer-btn text-weight-medium text-subtitle1 {is_active("configure")}'
+                )
+                
+                # History Settings button
+                ui.button(
+                    'History Settings',
+                    icon='history',
+                    on_click=lambda: handle_navigation('history_settings')
+                ).props(
+                    'flat no-caps align-left full-width'
+                ).classes(
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("history_settings")}'
                 )
                 
                 # Chat button

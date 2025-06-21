@@ -3,6 +3,7 @@ import json
 from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
+from .history_manager import history_manager
 import asyncio
 import json
 
@@ -73,9 +74,22 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         if tool_call_id:
             message['tool_call_id'] = tool_call_id
         
-        conversations[current_conversation_id]['messages'].append(message)
+        # Process message through history manager for size limits
+        processed_message = history_manager.process_message_for_storage(message)
+        
+        conversations[current_conversation_id]['messages'].append(processed_message)
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
+        
+        # Check if conversation or total history needs cleanup
+        if history_manager.settings['auto_cleanup']:
+            # Cleanup conversation if needed
+            history_manager.cleanup_conversation_if_needed(current_conversation_id)
+            
+            # Cleanup total history if needed
+            cleanup_result = history_manager.cleanup_history_if_needed()
+            if cleanup_result['cleaned']:
+                print(f"History cleanup: removed {cleanup_result['conversations_removed']} conversations, freed {cleanup_result['chars_removed']} characters")
 
 def find_tool_response(tool_call_id: str) -> Optional[str]:
     """Find the tool response for a given tool call ID"""
@@ -92,17 +106,27 @@ def render_message_to_ui(message: dict, message_container) -> None:
     content = message.get('content', '')
     tool_calls = message.get('tool_calls', [])
     tool_call_id = message.get('tool_call_id')
+    was_truncated = message.get('_truncated', False)
+    original_length = message.get('_original_length', 0)
     
     with message_container:
         if role == 'user':
             with ui.card().classes('user-message message-bubble ml-auto mb-4 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
                 ui.label('You:').classes('font-bold mb-2 text-blue-300')
                 parse_and_render_message(content, user_card)
+                
+                # Show truncation notice if message was truncated
+                if was_truncated:
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
             with ui.card().classes('assistant-message message-bubble mb-4 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
                 ui.label('Assistant:').classes('font-bold mb-2 text-gray-300')
                 if content:
                     parse_and_render_message(content, bot_card)
+                
+                # Show truncation notice if message was truncated
+                if was_truncated:
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
                 
                 # Show tool calls if present
                 if tool_calls:
