@@ -32,7 +32,7 @@ dependencies = [
     "openai>=1.0.0",
     "jsonschema>=4.0.0",
     "requests>=2.25.0",
-    "fastmcp==2.8.1",
+    "fastmcp>=2.8.0",
     "websockets>=11.0"
 ]
 
