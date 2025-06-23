@@ -93,12 +93,12 @@ jobs:
         draft: false
         prerelease: false
     
-    - name: Publish to PyPI
-      if: steps.check_tag.outputs.exists == 'false'
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        verbose: true
+    # - name: Publish to PyPI
+    #   if: steps.check_tag.outputs.exists == 'false'
+    #   uses: pypa/gh-action-pypi-publish@release/v1
+    #   with:
+    #     password: ${{ secrets.PYPI_API_TOKEN }}
+    #     verbose: true
     
     - name: Notify success
       if: steps.check_tag.outputs.exists == 'false'
