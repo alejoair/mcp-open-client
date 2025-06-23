@@ -13,20 +13,21 @@ class HistoryManager:
     """
     
     def __init__(self, 
-                 max_chars_per_message: int = 5000,
-                 max_chars_per_conversation: int = 50000,
-                 max_total_chars: int = 500000):
+                 max_tokens_per_message: int = 1200,        # ~5000 chars
+                 max_tokens_per_conversation: int = 12000):  # ~50000 chars
         """
         Inicializa el gestor de historial
         
         Args:
-            max_chars_per_message: Máximo de caracteres por mensaje individual
-            max_chars_per_conversation: Máximo de caracteres por conversación
-            max_total_chars: Máximo de caracteres totales en todo el historial
+            max_tokens_per_message: Máximo de tokens por mensaje individual
+            max_tokens_per_conversation: Máximo de tokens por conversación
         """
-        self.max_chars_per_message = max_chars_per_message
-        self.max_chars_per_conversation = max_chars_per_conversation
-        self.max_total_chars = max_total_chars
+        self.max_tokens_per_message = max_tokens_per_message
+        self.max_tokens_per_conversation = max_tokens_per_conversation
+        
+        # Mantener compatibilidad con valores de caracteres
+        self.max_chars_per_message = max_tokens_per_message * 4  # Estimación conservadora
+        self.max_chars_per_conversation = max_tokens_per_conversation * 4
         
         # Configuración por defecto
         self.settings = {
@@ -35,32 +36,57 @@ class HistoryManager:
             'compression_enabled': True,
             'auto_cleanup': True
         }
+        
+        # Ensure backward compatibility
+        self._ensure_token_attributes()
+    
+    def _ensure_token_attributes(self):
+        """Ensure token attributes exist for backward compatibility"""
+        if not hasattr(self, 'max_tokens_per_message'):
+            self.max_tokens_per_message = getattr(self, 'max_chars_per_message', 5000) // 4
+        if not hasattr(self, 'max_tokens_per_conversation'):
+            self.max_tokens_per_conversation = getattr(self, 'max_chars_per_conversation', 50000) // 4
+    
+    def estimate_tokens(self, text: str) -> int:
+        """Estima tokens de forma inteligente basado en el tipo de contenido"""
+        self._ensure_token_attributes()  # Ensure backward compatibility
+        if not text:
+            return 0
+        
+        # Ajustes por tipo de contenido
+        if text.startswith('{') or text.startswith('['):  # JSON
+            multiplier = 3.0
+        elif '```' in text:  # Código
+            multiplier = 3.2
+        elif text.count(' ') / len(text) > 0.15:  # Texto normal
+            multiplier = 4.2
+        else:  # Texto denso
+            multiplier = 3.8
+        
+        return int(len(text) / multiplier)
     
     def truncate_message_content(self, content: str, preserve_format: bool = True) -> Tuple[str, bool]:
-        """
-        Trunca el contenido de un mensaje si excede el límite
+        """Trunca el contenido basado en límite de tokens"""
+        estimated_tokens = self.estimate_tokens(content)
+        max_tokens = self.max_tokens_per_message
         
-        Args:
-            content: Contenido del mensaje
-            preserve_format: Si preservar formato markdown/código
-            
-        Returns:
-            Tuple de (contenido_truncado, fue_truncado)
-        """
-        if len(content) <= self.max_chars_per_message:
+        if estimated_tokens <= max_tokens:
             return content, False
+        
+        # Calcular caracteres aproximados para el límite de tokens
+        target_chars = max_tokens * 4  # Estimación conservadora
         
         truncated = False
         
         if self.settings['truncate_mode'] == 'smart':
             # Truncado inteligente preservando estructura
-            truncated_content = self._smart_truncate(content, self.max_chars_per_message)
+            truncated_content = self._smart_truncate(content, target_chars)
         elif self.settings['truncate_mode'] == 'tail':
             # Mantener el final
-            truncated_content = "..." + content[-(self.max_chars_per_message - 3):]
+            truncated_content = "..." + content[-(target_chars - 3):]
         else:  # 'head'
             # Mantener el inicio
-            truncated_content = content[:self.max_chars_per_message - 3] + "..."
+            truncated_content = content[:target_chars - 3] + "..."
         
         return truncated_content, True
     
@@ -153,38 +179,49 @@ class HistoryManager:
     
     def get_conversation_size(self, conversation_id: str, conversations: Dict[str, Any] = None) -> Dict[str, int]:
         """
-        Calcula el tamaño de una conversación
+        Calcula el tamaño de una conversación en tokens y caracteres
         
         Returns:
-            Dict con 'total_chars', 'message_count', 'avg_message_size'
+            Dict con 'total_tokens', 'total_chars', 'message_count', 'avg_token_size', 'avg_char_size'
         """
         if conversations is None:
             from .chat_handlers import get_conversation_storage
             conversations = get_conversation_storage()
         
         if conversation_id not in conversations:
-            return {'total_chars': 0, 'message_count': 0, 'avg_message_size': 0}
+            return {'total_tokens': 0, 'total_chars': 0, 'message_count': 0, 'avg_token_size': 0, 'avg_char_size': 0}
         
         messages = conversations[conversation_id].get('messages', [])
         total_chars = 0
+        total_tokens = 0
         
         for message in messages:
             content = message.get('content', '')
-            total_chars += len(content)
+            if content is not None:
+                chars = len(content)
+                tokens = self.estimate_tokens(content)
+                total_chars += chars
+                total_tokens += tokens
+            else:
+                # Log or handle the case where content is None
+                print(f"Warning: Message content is None in conversation {conversation_id}")
             
             # Contar tool calls también
             if 'tool_calls' in message:
                 for tool_call in message['tool_calls']:
                     if 'function' in tool_call and 'arguments' in tool_call['function']:
-                        total_chars += len(tool_call['function']['arguments'])
+                        args_content = tool_call['function']['arguments']
+                        total_chars += len(args_content)
+                        total_tokens += self.estimate_tokens(args_content)
         
         message_count = len(messages)
-        avg_size = total_chars // message_count if message_count > 0 else 0
         
         return {
-            'total_chars': total_chars,
+            'total_tokens': total_tokens,
+            'total_chars': total_chars,  # Mantener para referencia
             'message_count': message_count,
-            'avg_message_size': avg_size
+            'avg_token_size': total_tokens // message_count if message_count > 0 else 0,
+            'avg_char_size': total_chars // message_count if message_count > 0 else 0
         }
     
     def get_total_history_size(self) -> Dict[str, int]:
@@ -211,15 +248,10 @@ class HistoryManager:
         }
     
     def cleanup_conversation_if_needed(self, conversation_id: str) -> bool:
-        """
-        Limpia una conversación si excede los límites
-        
-        Returns:
-            True si se realizó limpieza
-        """
+        """Limpia una conversación si excede los límites de tokens"""
         stats = self.get_conversation_size(conversation_id)
         
-        if stats['total_chars'] <= self.max_chars_per_conversation:
+        if stats['total_tokens'] <= self.max_tokens_per_conversation:
             return False
         
         from .chat_handlers import get_conversation_storage
@@ -231,15 +263,16 @@ class HistoryManager:
         messages = conversations[conversation_id]['messages']
         
         # Estrategia: mantener mensajes más recientes
-        chars_to_remove = stats['total_chars'] - self.max_chars_per_conversation
-        chars_removed = 0
+        tokens_to_remove = stats['total_tokens'] - self.max_tokens_per_conversation
+        tokens_removed = 0
         messages_to_keep = []
         
         # Empezar desde el final y ir hacia atrás
         for message in reversed(messages):
-            message_size = len(message.get('content', ''))
-            if chars_removed < chars_to_remove:
-                chars_removed += message_size
+            content = message.get('content', '') or ''
+            message_tokens = self.estimate_tokens(content)
+            if tokens_removed < tokens_to_remove:
+                tokens_removed += message_tokens
             else:
                 messages_to_keep.insert(0, message)
         
@@ -253,67 +286,30 @@ class HistoryManager:
         
         return False
     
-    def cleanup_history_if_needed(self) -> Dict[str, Any]:
-        """
-        Limpia todo el historial si excede los límites globales
-        
-        Returns:
-            Dict con estadísticas de limpieza
-        """
-        stats = self.get_total_history_size()
-        
-        if stats['total_chars'] <= self.max_total_chars:
-            return {'cleaned': False, 'stats': stats}
-        
-        from .chat_handlers import get_conversation_storage
-        conversations = get_conversation_storage()
-        
-        # Ordenar conversaciones por fecha de actualización (más antigas primero)
-        sorted_conversations = sorted(
-            conversations.items(),
-            key=lambda x: x[1].get('updated_at', '0')
-        )
-        
-        chars_to_remove = stats['total_chars'] - self.max_total_chars
-        chars_removed = 0
-        conversations_removed = 0
-        
-        for conv_id, conv_data in sorted_conversations:
-            if chars_removed >= chars_to_remove:
-                break
-            
-            conv_stats = self.get_conversation_size(conv_id)
-            chars_removed += conv_stats['total_chars']
-            del conversations[conv_id]
-            conversations_removed += 1
-        
-        if conversations_removed > 0:
-            from nicegui import app
-            app.storage.user['conversations'] = conversations
-        
-        new_stats = self.get_total_history_size()
-        
-        return {
-            'cleaned': True,
-            'conversations_removed': conversations_removed,
-            'chars_removed': chars_removed,
-            'old_stats': stats,
-            'new_stats': new_stats
-        }
+    # Global history cleanup removed - only per-conversation limits apply
     
     def get_settings(self) -> Dict[str, Any]:
         """Obtiene la configuración actual"""
+        self._ensure_token_attributes()  # Ensure backward compatibility
         return {
+            'max_tokens_per_message': self.max_tokens_per_message,
+            'max_tokens_per_conversation': self.max_tokens_per_conversation,
             'max_chars_per_message': self.max_chars_per_message,
             'max_chars_per_conversation': self.max_chars_per_conversation,
-            'max_total_chars': self.max_total_chars,
             **self.settings
         }
     
     def update_settings(self, **kwargs) -> None:
         """Actualiza la configuración"""
         for key, value in kwargs.items():
-            if key in ['max_chars_per_message', 'max_chars_per_conversation', 'max_total_chars']:
+            if key in ['max_tokens_per_message', 'max_tokens_per_conversation']:
+                setattr(self, key, value)
+                # Update corresponding char limits
+                if key == 'max_tokens_per_message':
+                    self.max_chars_per_message = value * 4
+                elif key == 'max_tokens_per_conversation':
+                    self.max_chars_per_conversation = value * 4
+            elif key in ['max_chars_per_message', 'max_chars_per_conversation']:
                 setattr(self, key, value)
             elif key in self.settings:
                 self.settings[key] = value

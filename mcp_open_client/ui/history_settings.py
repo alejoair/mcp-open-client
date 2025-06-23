@@ -16,63 +16,35 @@ def create_history_settings_ui(container):
         # Obtener configuración actual
         settings = history_manager.get_settings()
         
-        # Estadísticas actuales
+        # Información sobre límites
         with ui.card().classes('w-full mb-6'):
-            ui.label('Current Statistics').classes('text-lg font-semibold mb-3')
-            
-            stats = history_manager.get_total_history_size()
-            
-            with ui.grid(columns=4).classes('w-full gap-4'):
-                with ui.card().classes('p-4 text-center'):
-                    ui.label(f"{stats['total_chars']:,}").classes('text-2xl font-bold text-blue-600')
-                    ui.label('Total Characters').classes('text-sm text-gray-600')
-                
-                with ui.card().classes('p-4 text-center'):
-                    ui.label(f"{stats['total_messages']:,}").classes('text-2xl font-bold text-green-600')
-                    ui.label('Total Messages').classes('text-sm text-gray-600')
-                
-                with ui.card().classes('p-4 text-center'):
-                    ui.label(f"{stats['conversation_count']:,}").classes('text-2xl font-bold text-purple-600')
-                    ui.label('Conversations').classes('text-sm text-gray-600')
-                
-                with ui.card().classes('p-4 text-center'):
-                    ui.label(f"{stats['avg_chars_per_conversation']:,}").classes('text-2xl font-bold text-orange-600')
-                    ui.label('Avg. Chars/Conv').classes('text-sm text-gray-600')
+            ui.label('History Limits Information').classes('text-lg font-semibold mb-3')
+            ui.label('Configure token limits for conversation management. Tokens provide better LLM compatibility than character counts.').classes('text-sm text-gray-600')
         
         # Configuración de límites
         with ui.card().classes('w-full mb-6'):
-            ui.label('Character Limits').classes('text-lg font-semibold mb-3')
+            ui.label('Token Limits').classes('text-lg font-semibold mb-3')
             
             with ui.row().classes('w-full gap-4'):
                 with ui.column().classes('flex-1'):
-                    ui.label('Max Characters per Message')
-                    max_chars_per_message = ui.number(
-                        value=settings['max_chars_per_message'],
-                        min=500,
+                    ui.label('Max Tokens per Message')
+                    max_tokens_per_message = ui.number(
+                        value=settings['max_tokens_per_message'],
+                        min=100,
+                        max=5000,
+                        step=50
+                    ).classes('w-full')
+                    ui.label(f"Current: {settings['max_tokens_per_message']:,} tokens (~{settings['max_tokens_per_message']*4:,} chars)").classes('text-sm text-gray-600')
+                
+                with ui.column().classes('flex-1'):
+                    ui.label('Max Tokens per Conversation')
+                    max_tokens_per_conversation = ui.number(
+                        value=settings['max_tokens_per_conversation'],
+                        min=1000,
                         max=50000,
                         step=500
                     ).classes('w-full')
-                    ui.label(f"Current: {settings['max_chars_per_message']:,} chars").classes('text-sm text-gray-600')
-                
-                with ui.column().classes('flex-1'):
-                    ui.label('Max Characters per Conversation')
-                    max_chars_per_conversation = ui.number(
-                        value=settings['max_chars_per_conversation'],
-                        min=5000,
-                        max=500000,
-                        step=5000
-                    ).classes('w-full')
-                    ui.label(f"Current: {settings['max_chars_per_conversation']:,} chars").classes('text-sm text-gray-600')
-                
-                with ui.column().classes('flex-1'):
-                    ui.label('Max Total Characters')
-                    max_total_chars = ui.number(
-                        value=settings['max_total_chars'],
-                        min=50000,
-                        max=5000000,
-                        step=50000
-                    ).classes('w-full')
-                    ui.label(f"Current: {settings['max_total_chars']:,} chars").classes('text-sm text-gray-600')
+                    ui.label(f"Current: {settings['max_tokens_per_conversation']:,} tokens (~{settings['max_tokens_per_conversation']*4:,} chars)").classes('text-sm text-gray-600')
         
         # Configuración de comportamiento
         with ui.card().classes('w-full mb-6'):
@@ -121,34 +93,19 @@ def create_history_settings_ui(container):
                     else:
                         ui.notify('No active conversation', type='warning')
                 
-                async def cleanup_all_history():
-                    result = history_manager.cleanup_history_if_needed()
-                    if result['cleaned']:
-                        ui.notify(f"Cleaned up {result['conversations_removed']} conversations", type='positive')
-                        refresh_stats()
-                    else:
-                        ui.notify('History is within limits', type='info')
-                
                 ui.button(
                     'Cleanup Current Conversation',
                     icon='cleaning_services',
                     on_click=cleanup_current_conversation
                 ).classes('').props('color=orange')
-                
-                ui.button(
-                    'Cleanup All History',
-                    icon='delete_sweep',
-                    on_click=cleanup_all_history
-                ).classes('').props('color=red')
         
         # Botones de acción
         with ui.row().classes('w-full justify-end gap-4 mt-6'):
             def save_settings():
                 try:
                     history_manager.update_settings(
-                        max_chars_per_message=int(max_chars_per_message.value),
-                        max_chars_per_conversation=int(max_chars_per_conversation.value),
-                        max_total_chars=int(max_total_chars.value),
+                        max_tokens_per_message=int(max_tokens_per_message.value),
+                        max_tokens_per_conversation=int(max_tokens_per_conversation.value),
                         truncate_mode=truncate_mode.value,
                         preserve_tool_calls=preserve_tool_calls.value,
                         auto_cleanup=auto_cleanup.value,
@@ -160,9 +117,8 @@ def create_history_settings_ui(container):
                     ui.notify(f'Error saving settings: {str(e)}', type='negative')
             
             def reset_to_defaults():
-                max_chars_per_message.value = 5000
-                max_chars_per_conversation.value = 50000
-                max_total_chars.value = 500000
+                max_tokens_per_message.value = 1200
+                max_tokens_per_conversation.value = 12000
                 truncate_mode.value = 'smart'
                 preserve_tool_calls.value = True
                 auto_cleanup.value = True
@@ -170,8 +126,8 @@ def create_history_settings_ui(container):
                 ui.notify('Settings reset to defaults', type='info')
             
             def refresh_stats():
-                # Refrescar estadísticas
-                new_stats = history_manager.get_total_history_size()
+                # Stats refresh removed - no longer tracking global totals
+                pass
                 # Aquí podrías actualizar los elementos de la UI si necesario
                 pass
             
@@ -188,9 +144,13 @@ def create_conversation_details_ui(container, conversation_id: str):
         
         stats = history_manager.get_conversation_size(conversation_id)
         
-        with ui.grid(columns=3).classes('w-full gap-4 mb-4'):
+        with ui.grid(columns=4).classes('w-full gap-4 mb-4'):
             with ui.card().classes('p-4 text-center'):
-                ui.label(f"{stats['total_chars']:,}").classes('text-xl font-bold text-blue-600')
+                ui.label(f"{stats['total_tokens']:,}").classes('text-xl font-bold text-blue-600')
+                ui.label('Total Tokens').classes('text-sm text-gray-600')
+            
+            with ui.card().classes('p-4 text-center'):
+                ui.label(f"{stats['total_chars']:,}").classes('text-xl font-bold text-gray-600')
                 ui.label('Total Characters').classes('text-sm text-gray-600')
             
             with ui.card().classes('p-4 text-center'):
@@ -198,8 +158,8 @@ def create_conversation_details_ui(container, conversation_id: str):
                 ui.label('Messages').classes('text-sm text-gray-600')
             
             with ui.card().classes('p-4 text-center'):
-                ui.label(f"{stats['avg_message_size']:,}").classes('text-xl font-bold text-purple-600')
-                ui.label('Avg. Message Size').classes('text-sm text-gray-600')
+                ui.label(f"{stats['avg_token_size']:,}").classes('text-xl font-bold text-purple-600')
+                ui.label('Avg. Token Size').classes('text-sm text-gray-600')
         
         # Progreso hacia los límites
         with ui.card().classes('w-full p-4'):
@@ -207,13 +167,10 @@ def create_conversation_details_ui(container, conversation_id: str):
             
             settings = history_manager.get_settings()
             
-            # Progreso de caracteres por conversación
-            conv_progress = min(100, (stats['total_chars'] / settings['max_chars_per_conversation']) * 100)
-            ui.label(f"Conversation Size: {conv_progress:.1f}% of limit")
+            # Progreso de tokens por conversación
+            conv_progress = min(100, (stats['total_tokens'] / settings['max_tokens_per_conversation']) * 100)
+            ui.label(f"Conversation Size: {conv_progress:.1f}% of token limit")
             ui.linear_progress(value=conv_progress/100).classes('mb-2')
             
-            # Progreso total
-            total_stats = history_manager.get_total_history_size()
-            total_progress = min(100, (total_stats['total_chars'] / settings['max_total_chars']) * 100)
-            ui.label(f"Total History Size: {total_progress:.1f}% of limit")
-            ui.linear_progress(value=total_progress/100)
+            # Note: Removed total progress - only per-conversation limits apply
+            # Global history tracking removed - only per-conversation limits apply

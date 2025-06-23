@@ -310,17 +310,18 @@ def setup_ui():
         # Make update_content available globally
         global current_update_content_function
         current_update_content_function = update_content
+
         
         with ui.header(elevated=False).classes('app-header'):
             with ui.row().classes('items-center full-width no-wrap header-row'):
                 with ui.row().classes('items-center no-wrap gap-2 header-left'):
-                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn').props('flat dense')
+                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn text-white').props('flat dense')
                     ui.label('MCP-Open-Client').classes('app-title text-subtitle1')
                 
                 ui.space()
                 
                 with ui.row().classes('header-actions items-center no-wrap'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').props('flat dense').tooltip('User Account')
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn text-white').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
@@ -364,6 +365,7 @@ def setup_ui():
                     f'drawer-btn text-weight-medium text-subtitle1 {is_active("configure")}'
                 )
                 
+
                 # History Settings button
                 ui.button(
                     'History Settings',
