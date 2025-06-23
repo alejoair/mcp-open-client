@@ -13,6 +13,7 @@ def get_show_configure_content():
 
 # Use get_show_configure_content() when you need to call show_content
 from mcp_open_client.ui.chat_window import show_content as show_chat_content
+from mcp_open_client.ui.history_settings import create_history_settings_ui
 
 # Import MCP client manager
 from mcp_open_client.mcp_client import mcp_client_manager
@@ -303,21 +304,24 @@ def setup_ui():
                 get_show_configure_content()(content_container)
             elif section == 'chat':
                 show_chat_content(content_container)
+            elif section == 'history_settings':
+                create_history_settings_ui(content_container)
         
         # Make update_content available globally
         global current_update_content_function
         current_update_content_function = update_content
+
         
         with ui.header(elevated=False).classes('app-header'):
             with ui.row().classes('items-center full-width no-wrap header-row'):
                 with ui.row().classes('items-center no-wrap gap-2 header-left'):
-                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn').props('flat dense')
+                    ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn text-white').props('flat dense')
                     ui.label('MCP-Open-Client').classes('app-title text-subtitle1')
                 
                 ui.space()
                 
                 with ui.row().classes('header-actions items-center no-wrap'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn').props('flat dense').tooltip('User Account')
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn text-white').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
@@ -359,6 +363,18 @@ def setup_ui():
                     'flat no-caps align-left full-width'
                 ).classes(
                     f'drawer-btn text-weight-medium text-subtitle1 {is_active("configure")}'
+                )
+                
+
+                # History Settings button
+                ui.button(
+                    'History Settings',
+                    icon='history',
+                    on_click=lambda: handle_navigation('history_settings')
+                ).props(
+                    'flat no-caps align-left full-width'
+                ).classes(
+                    f'drawer-btn text-weight-medium text-subtitle1 {is_active("history_settings")}'
                 )
                 
                 # Chat button

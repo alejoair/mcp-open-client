@@ -1,63 +1,228 @@
-# Drawer Close Button Positioning Solution
+# MCP Open Client
 
-This repository contains a comprehensive solution for moving the drawer close button from its default right position to the left side in a NiceGUI application that uses Quasar components.
+> A modern, web-based chat application that implements the Model Context Protocol (MCP) for seamless integration between Large Language Models and external tools.
 
-## Files Included
+## 🚀 What is MCP Open Client?
 
-- **settings/app-styles.css**: Contains 7 different CSS selector options to move the drawer close button
-- **drawer-button-verification.md**: Guide for testing and troubleshooting the solution
-- **drawer-solution-summary.md**: Summary of the approach and explanation of CSS options
-- **browser-specific-fixes.css**: Additional CSS for browser compatibility
-- **custom-drawer-example.py**: Alternative Python implementations with custom drawers
+**MCP Open Client** is a NiceGUI-based chat application that serves as a bridge between AI models and external tools through the **Model Context Protocol (MCP)**. Think of it as "USB-C for AI" - a universal interface that allows any compatible LLM to securely interact with external data sources, tools, and services.
 
-## Quick Start
+### Key Features
 
-1. Include the CSS from `settings/app-styles.css` in your NiceGUI application
-2. Test the drawer close button position
-3. If needed, refer to `drawer-button-verification.md` for troubleshooting
+- 🤖 **Multi-LLM Support**: Compatible with Claude, OpenAI, and other OpenAI-compatible APIs
+- 🔧 **MCP Integration**: Connect to MCP servers for enhanced functionality
+- 💬 **Modern Chat Interface**: Clean, responsive web UI built with NiceGUI
+- 📚 **Conversation Management**: Save, load, and organize your chat history
+- ⚙️ **Easy Configuration**: Web-based settings management
+- 🌐 **Local & Remote**: Works with local models and cloud APIs
+- 🔒 **Secure**: All configurations stored locally
 
-## CSS Solution
+## 🏗️ Architecture
 
-The primary solution uses CSS to change the `justify-content` property of the drawer header from `flex-end` (right-aligned) to `flex-start` (left-aligned). Multiple selector options are provided to ensure compatibility with different Quasar/NiceGUI versions.
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Client    │◄──►│   MCP Client    │◄──►│  MCP Servers    │
+│   (NiceGUI)     │    │  (Protocol)     │    │  (FastMCP)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+    Chat Interface         API Integration         External Tools
+    • Conversations        • OpenAI API           • File Systems
+    • History             • Claude API            • Databases
+    • Settings            • Local Models          • Web Services
+```
 
-Example:
-```css
-.q-drawer__content > div:first-child {
-  justify-content: flex-start !important;
+## 📦 Installation
+
+### Option 1: Install from PyPI (Recommended)
+```bash
+pip install mcp-open-client
+mcp-open-client
+```
+
+### Option 2: Install from Source
+```bash
+git clone https://github.com/alejoair/mcp-open-client.git
+cd mcp-open-client
+pip install -e .
+mcp-open-client
+```
+
+### Option 3: Development Setup
+```bash
+git clone https://github.com/alejoair/mcp-open-client.git
+cd mcp-open-client
+pip install -r requirements.txt
+python -m mcp_open_client.main
+```
+
+## 🚀 Quick Start
+
+1. **Launch the application**:
+   ```bash
+   mcp-open-client
+   ```
+
+2. **Open your browser** to `http://localhost:8080`
+
+3. **Configure your API settings**:
+   - Go to Configuration → API Settings
+   - Add your API key and model preferences
+   - Choose from OpenAI, Claude, or local models
+
+4. **Set up MCP servers** (optional):
+   - Go to Configuration → MCP Servers
+   - Add servers for enhanced functionality
+
+5. **Start chatting**!
+
+## ⚙️ Configuration
+
+### API Settings
+Configure your preferred AI model in the web interface:
+
+- **API Key**: Your OpenAI/Claude API key
+- **Base URL**: API endpoint (supports local models like LM Studio)
+- **Model**: Choose your preferred model
+- **System Prompt**: Customize the assistant's behavior
+
+### MCP Servers
+Connect external tools and services:
+
+```json
+{
+  "mcpServers": {
+    "mcp-requests": {
+      "disabled": false,
+      "command": "uvx",
+      "args": ["mcp-requests"],
+      "transport": "stdio"
+    },
+    "mcp-code-editor": {
+      "disabled": false,
+      "command": "uvx",
+      "args": ["mcp-code-editor"]
+    }
+  }
 }
 ```
 
-## Alternative Approaches
+## 🛠️ Supported MCP Servers
 
-If the CSS solution doesn't work for your specific implementation, alternative approaches are provided:
+The client works with any MCP-compliant server. Popular options include:
 
-1. **Custom Drawer Header**: Create your own drawer header with a manually positioned close button
-2. **JavaScript Solution**: Use client-side JavaScript to reposition the button programmatically
-3. **CSS Hiding Technique**: Hide the default button and add your own in the desired position
+- **mcp-requests**: HTTP request capabilities
+- **mcp-code-editor**: File system operations
+- **mcp-database**: Database connectivity
+- **Custom servers**: Build your own with FastMCP
 
-## Browser Compatibility
+## 🔧 Development
 
-The solution includes specific fixes for:
-- Chrome and Chromium-based browsers
-- Firefox
-- Safari
-- Edge/IE Legacy
-- Mobile devices
-- High-density displays
+### Project Structure
+```
+mcp_open_client/
+├── main.py                    # Application entry point
+├── api_client.py             # LLM API communication
+├── mcp_client.py             # MCP protocol handler
+├── config_utils.py           # Configuration management
+├── settings/                 # Default configurations
+│   ├── user-settings.json    # API settings
+│   └── mcp-config.json      # MCP server config
+└── ui/                      # User interface components
+    ├── home.py              # Home page
+    ├── chat_interface.py    # Chat UI
+    ├── configure.py         # Settings UI
+    ├── mcp_servers.py       # MCP management
+    └── chat_handlers.py     # Chat logic
+```
 
-## Integration with NiceGUI
+### Running Tests
+```bash
+python -m pytest tests/
+```
 
-The solution is designed to work with NiceGUI's implementation of Quasar's drawer component. It respects the existing drawer functionality while only changing the position of the close button.
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## Troubleshooting
+## 🌟 Features in Detail
 
-If you encounter issues:
+### Chat Interface
+- **Real-time messaging** with streaming responses
+- **Conversation history** with search and organization
+- **Message formatting** with syntax highlighting
+- **Tool integration** via MCP protocol
 
-1. Check which CSS selector works best for your specific implementation
-2. Use browser developer tools to inspect the drawer structure
-3. Try the alternative approaches provided in `custom-drawer-example.py`
-4. Refer to `drawer-button-verification.md` for detailed troubleshooting steps
+### Configuration Management
+- **Web-based settings** - no need to edit config files
+- **Multiple API providers** - OpenAI, Anthropic, local models
+- **MCP server management** - enable/disable servers on the fly
+- **Theme customization** - dark/light mode support
 
-## License
+### MCP Integration
+- **Protocol compliance** - works with any MCP server
+- **Dynamic server loading** - add servers without restart
+- **Tool discovery** - automatic detection of available tools
+- **Error handling** - graceful degradation when servers are unavailable
 
-This solution is provided under the MIT License.
+## 📋 Requirements
+
+- Python 3.7+
+- Modern web browser
+- Internet connection (for cloud APIs) or local model setup
+
+### Dependencies
+- `nicegui` - Web UI framework
+- `openai` - API client library
+- `fastmcp` - MCP protocol implementation
+- `websockets` - WebSocket support
+- `requests` - HTTP client
+- `jsonschema` - Configuration validation
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Connection Problems**:
+- Check your API key and base URL
+- Verify network connectivity
+- Ensure MCP servers are running
+
+**UI Issues**:
+- Clear browser cache
+- Try a different browser
+- Check browser console for errors
+
+**MCP Server Issues**:
+- Verify server configuration
+- Check server logs
+- Test servers independently
+
+### Getting Help
+
+- 📖 Check the [documentation](https://github.com/alejoair/mcp-open-client/wiki)
+- 🐛 [Report bugs](https://github.com/alejoair/mcp-open-client/issues)
+- 💬 [Ask questions](https://github.com/alejoair/mcp-open-client/discussions)
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [NiceGUI](https://nicegui.io/) for the web interface
+- Uses [FastMCP](https://github.com/jlowin/fastmcp) for MCP protocol implementation
+- Inspired by the [Model Context Protocol](https://modelcontextprotocol.io/) specification
+
+## 🔗 Links
+
+- **Homepage**: [https://github.com/alejoair/mcp-open-client](https://github.com/alejoair/mcp-open-client)
+- **Documentation**: [Wiki](https://github.com/alejoair/mcp-open-client/wiki)
+- **Bug Tracker**: [Issues](https://github.com/alejoair/mcp-open-client/issues)
+- **MCP Specification**: [modelcontextprotocol.io](https://modelcontextprotocol.io/)
+
+---
+
+Made with ❤️ by [alejoair](https://github.com/alejoair)

@@ -3,11 +3,13 @@ import json
 from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
+from .history_manager import history_manager
 import asyncio
 import json
 
-# Global variable to track current conversation
+# Global variables
 current_conversation_id: Optional[str] = None
+stats_update_callback: Optional[callable] = None
 
 def get_conversation_storage() -> Dict[str, Any]:
     """Get or initialize conversation storage"""
@@ -37,10 +39,18 @@ def load_conversation(conversation_id: str) -> None:
     conversations = get_conversation_storage()
     if conversation_id in conversations:
         current_conversation_id = conversation_id
+        # Update stats when conversation changes
+        if stats_update_callback:
+            stats_update_callback()
 
 def get_current_conversation_id() -> Optional[str]:
     """Get the current conversation ID"""
     return current_conversation_id
+
+def set_stats_update_callback(callback: callable) -> None:
+    """Set the callback function to update stats"""
+    global stats_update_callback
+    stats_update_callback = callback
 
 def get_messages() -> List[Dict[str, Any]]:
     """Get messages from current conversation"""
@@ -73,9 +83,30 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         if tool_call_id:
             message['tool_call_id'] = tool_call_id
         
-        conversations[current_conversation_id]['messages'].append(message)
+        # Process message through history manager for size limits
+        processed_message = history_manager.process_message_for_storage(message)
+        print(f"Message processed: original size: {len(json.dumps(message))}, processed size: {len(json.dumps(processed_message))}")
+        
+        conversations[current_conversation_id]['messages'].append(processed_message)
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
+        
+        # Log conversation size
+        conv_size = history_manager.get_conversation_size(current_conversation_id)
+        print(f"Conversation {current_conversation_id} size: {conv_size['total_tokens']} tokens ({conv_size['total_chars']} chars), {conv_size['message_count']} messages")
+        
+        # Check if conversation or total history needs cleanup
+        if history_manager.settings['auto_cleanup']:
+            # Cleanup conversation if needed
+            conv_cleanup = history_manager.cleanup_conversation_if_needed(current_conversation_id)
+            if conv_cleanup:
+                print(f"Conversation cleanup performed for {current_conversation_id}")
+            
+            # Note: Global history cleanup disabled - only per-conversation limits apply
+        
+        # Update stats in UI if callback is set
+        if stats_update_callback:
+            stats_update_callback()
 
 def find_tool_response(tool_call_id: str) -> Optional[str]:
     """Find the tool response for a given tool call ID"""
@@ -92,17 +123,27 @@ def render_message_to_ui(message: dict, message_container) -> None:
     content = message.get('content', '')
     tool_calls = message.get('tool_calls', [])
     tool_call_id = message.get('tool_call_id')
+    was_truncated = message.get('_truncated', False)
+    original_length = message.get('_original_length', 0)
     
     with message_container:
         if role == 'user':
             with ui.card().classes('user-message message-bubble ml-auto mb-4 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
-                ui.label('You:').classes('font-bold mb-2 text-blue-300')
+                ui.label('You:').classes('font-bold text-blue-300')
                 parse_and_render_message(content, user_card)
+                
+                # Show truncation notice if message was truncated
+                if was_truncated:
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
             with ui.card().classes('assistant-message message-bubble mb-4 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
-                ui.label('Assistant:').classes('font-bold mb-2 text-gray-300')
+                ui.label('Assistant:').classes('font-bold text-gray-300')
                 if content:
                     parse_and_render_message(content, bot_card)
+                
+                # Show truncation notice if message was truncated
+                if was_truncated:
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
                 
                 # Show tool calls if present
                 if tool_calls:
@@ -120,8 +161,8 @@ def render_message_to_ui(message: dict, message_container) -> None:
                                         icon=None,
                                         value=False).classes('w-full max-w-full border-l-4 border-blue-400 mb-2 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"'):
                             # Tool Call Section
-                            ui.label('Call:').classes('font-semibold text-blue-300 mt-2')
-                            ui.code(tool_name, language='text').classes('w-full overflow-x-auto mb-2')
+                            ui.label('Call:').classes('font-semibold text-blue-300 mt-1')
+                            ui.code(tool_name, language='text').classes('w-full overflow-x-auto')
                             ui.label('Arguments:').classes('font-semibold text-blue-300')
                             try:
                                 # Try to format JSON arguments nicely
