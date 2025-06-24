@@ -12,9 +12,9 @@ class HistoryManager:
     Gestiona el historial de conversaciones con límites de caracteres y optimizaciones
     """
     
-    def __init__(self, 
-                 max_tokens_per_message: int = 1200,        # ~5000 chars
-                 max_tokens_per_conversation: int = 12000):  # ~50000 chars
+    def __init__(self,
+                 max_tokens_per_message: int = 10000,       # ~40000 chars
+                 max_tokens_per_conversation: int = 1000000):  # ~4M chars (1M tokens)
         """
         Inicializa el gestor de historial
         
@@ -43,9 +43,17 @@ class HistoryManager:
     def _ensure_token_attributes(self):
         """Ensure token attributes exist for backward compatibility"""
         if not hasattr(self, 'max_tokens_per_message'):
-            self.max_tokens_per_message = getattr(self, 'max_chars_per_message', 5000) // 4
+            # Default to 2500 tokens (~10000 chars) if no previous value exists
+            self.max_tokens_per_message = getattr(self, 'max_tokens_per_message', 2500)
         if not hasattr(self, 'max_tokens_per_conversation'):
-            self.max_tokens_per_conversation = getattr(self, 'max_chars_per_conversation', 50000) // 4
+            # Default to 12500 tokens (~50000 chars) if no previous value exists
+            self.max_tokens_per_conversation = getattr(self, 'max_tokens_per_conversation', 12500)
+        
+        # Ensure char attributes are synchronized with token attributes
+        if not hasattr(self, 'max_chars_per_message'):
+            self.max_chars_per_message = self.max_tokens_per_message * 4
+        if not hasattr(self, 'max_chars_per_conversation'):
+            self.max_chars_per_conversation = self.max_tokens_per_conversation * 4
     
     def estimate_tokens(self, text: str) -> int:
         """Estima tokens de forma inteligente basado en el tipo de contenido"""

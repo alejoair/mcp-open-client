@@ -82,7 +82,7 @@ def load_conversation_messages(message_container):
         # Show welcome message if no conversation is active
         with message_container:
             with ui.card().classes('') as welcome_card:
-                ui.label('Assistant:').classes('font-bold')
+                # Role label removed - visual distinction by position and color
                 welcome_message = '''Welcome to MCP Open Client!
 
 I can help you interact with MCP (Model Context Protocol) servers.
@@ -123,14 +123,13 @@ def create_demo_messages(message_container):
     with message_container:
         # Sample messages for demo
         with ui.card().classes('') as demo_bot_card:
-            ui.label('Bot:').classes('font-bold')
             demo_message = '''Hello! I can help you interact with MCP servers and answer your questions.
 
 Feel free to ask me anything or start a conversation!'''
             parse_and_render_message(demo_message, demo_bot_card)
             
         with ui.card().classes('ml-auto mr-4') as demo_user_card:
-            ui.label('You:').classes('font-bold')
+            # Role label removed - visual distinction by position and color
             parse_and_render_message('Hello! How can you help me?', demo_user_card)
 
 

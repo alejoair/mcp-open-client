@@ -129,7 +129,6 @@ def render_message_to_ui(message: dict, message_container) -> None:
     with message_container:
         if role == 'user':
             with ui.card().classes('user-message message-bubble ml-auto mb-4 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
-                ui.label('You:').classes('font-bold text-blue-300')
                 parse_and_render_message(content, user_card)
                 
                 # Show truncation notice if message was truncated
@@ -137,7 +136,6 @@ def render_message_to_ui(message: dict, message_container) -> None:
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
             with ui.card().classes('assistant-message message-bubble mb-4 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
-                ui.label('Assistant:').classes('font-bold text-gray-300')
                 if content:
                     parse_and_render_message(content, bot_card)
                 
@@ -372,6 +370,56 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
             # Get full conversation history for context
             conversation_messages = get_messages()
             
+            # Validate and clean conversation to handle orphaned tool calls
+            def validate_and_clean_messages(messages):
+                """
+                Validates message sequence and handles orphaned tool calls.
+                Removes assistant messages with tool_calls that don't have corresponding tool results.
+                """
+                cleaned_messages = []
+                i = 0
+                
+                while i < len(messages):
+                    msg = messages[i]
+                    
+                    # If this is an assistant message with tool_calls
+                    if (msg["role"] == "assistant" and
+                        "tool_calls" in msg and
+                        msg["tool_calls"]):
+                        
+                        # Check if the next messages contain all corresponding tool results
+                        tool_call_ids = {tc["id"] for tc in msg["tool_calls"]}
+                        found_tool_results = set()
+                        
+                        # Look ahead for tool results
+                        j = i + 1
+                        while j < len(messages) and messages[j]["role"] == "tool":
+                            if "tool_call_id" in messages[j]:
+                                found_tool_results.add(messages[j]["tool_call_id"])
+                            j += 1
+                        
+                        # If all tool calls have corresponding results, include them
+                        if tool_call_ids == found_tool_results:
+                            # Add the assistant message with tool calls
+                            cleaned_messages.append(msg)
+                            # Add all the tool result messages
+                            for k in range(i + 1, j):
+                                cleaned_messages.append(messages[k])
+                            i = j  # Skip to after the tool results
+                        else:
+                            # Orphaned tool calls - skip this assistant message and any partial tool results
+                            print(f"Warning: Removing orphaned tool calls. Expected: {tool_call_ids}, Found: {found_tool_results}")
+                            i = j  # Skip to after any partial tool results
+                    else:
+                        # Regular message (user, assistant without tool_calls)
+                        cleaned_messages.append(msg)
+                        i += 1
+                
+                return cleaned_messages
+            
+            # Clean the conversation messages
+            conversation_messages = validate_and_clean_messages(conversation_messages)
+            
             # Convert to API format
             api_messages = []
             for msg in conversation_messages:
@@ -415,37 +463,65 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
                 render_messages(message_container)
                 await safe_scroll_to_bottom(scroll_area, delay=0.1)
                 
-                # Process each tool call
+                # Process each tool call with error handling
                 tool_results = []
                 for tool_call in tool_calls:
-                    tool_result = await handle_tool_call(tool_call)
-                    tool_results.append(tool_result)
-                    
-                    # Add tool result to conversation storage
-                    add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
-                    
-                    # Update UI immediately after each tool result
-                    message_container.clear()
-                    render_messages(message_container)
-                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                    try:
+                        tool_result = await handle_tool_call(tool_call)
+                        tool_results.append(tool_result)
+                        
+                        # Add tool result to conversation storage
+                        add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                        
+                        # Update UI immediately after each tool result
+                        message_container.clear()
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                    except Exception as e:
+                        # Handle tool call failure - add error message as tool result
+                        error_message = f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}"
+                        error_result = {
+                            'tool_call_id': tool_call['id'],
+                            'content': error_message
+                        }
+                        tool_results.append(error_result)
+                        
+                        # Add error result to conversation storage
+                        add_message('tool', error_message, tool_call_id=tool_call['id'])
+                        
+                        # Update UI immediately after error
+                        message_container.clear()
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                        print(f"Tool call error: {error_message}")
                 
-                # Update API messages with assistant message including tool calls
-                api_messages.append({
-                    "role": "assistant",
-                    "content": assistant_message.get('content'),
-                    "tool_calls": assistant_message.get('tool_calls')
-                })
-                
-                # Add tool results to API messages
-                for tool_result in tool_results:
-                    api_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_result['tool_call_id'],
-                        "content": tool_result['content']
-                    })
+                # Note: No need to add to api_messages here since they're already
+                # added to conversation storage via add_message() calls above.
+                # The next API call will rebuild api_messages from the updated conversation.
                 
                 # Continue processing until no more tool calls
                 while True:
+                    # Rebuild api_messages from updated conversation for next API call
+                    conversation_messages = get_messages()
+                    api_messages = []
+                    for msg in conversation_messages:
+                        api_msg = {
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        }
+                        
+                        # Include tool_calls for assistant messages
+                        if msg["role"] == "assistant" and "tool_calls" in msg:
+                            api_msg["tool_calls"] = msg["tool_calls"]
+                        
+                        # Include tool_call_id for tool messages
+                        if msg["role"] == "tool" and "tool_call_id" in msg:
+                            api_msg["tool_call_id"] = msg["tool_call_id"]
+                        
+                        api_messages.append(api_msg)
+                    
                     final_response = await api_client.chat_completion(api_messages, tools=available_tools)
                     
                     # Check if this response also has tool calls
@@ -463,34 +539,32 @@ async def handle_send(input_field, message_container, api_client, scroll_area):
                         render_messages(message_container)
                         await safe_scroll_to_bottom(scroll_area, delay=0.1)
                         
-                        # Update API messages
-                        api_messages.append({
-                            "role": "assistant",
-                            "content": assistant_message.get('content'),
-                            "tool_calls": assistant_message.get('tool_calls')
-                        })
-                        
-                        # Process each additional tool call
-                        additional_tool_results = []
+                        # Process each additional tool call with error handling
                         for tool_call in additional_tool_calls:
-                            tool_result = await handle_tool_call(tool_call)
-                            additional_tool_results.append(tool_result)
-                            
-                            # Add tool result to conversation storage
-                            add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
-                            
-                            # Update UI immediately after each tool result
-                            message_container.clear()
-                            render_messages(message_container)
-                            await safe_scroll_to_bottom(scroll_area, delay=0.1)
-                        
-                        # Add tool results to API messages
-                        for tool_result in additional_tool_results:
-                            api_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_result['tool_call_id'],
-                                "content": tool_result['content']
-                            })
+                            try:
+                                tool_result = await handle_tool_call(tool_call)
+                                
+                                # Add tool result to conversation storage
+                                add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                                
+                                # Update UI immediately after each tool result
+                                message_container.clear()
+                                render_messages(message_container)
+                                await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                                
+                            except Exception as e:
+                                # Handle tool call failure - add error message as tool result
+                                error_message = f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}"
+                                
+                                # Add error result to conversation storage
+                                add_message('tool', error_message, tool_call_id=tool_call['id'])
+                                
+                                # Update UI immediately after error
+                                message_container.clear()
+                                render_messages(message_container)
+                                await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                                
+                                print(f"Additional tool call error: {error_message}")
                         
                         # Continue the loop to get next response
                         continue
