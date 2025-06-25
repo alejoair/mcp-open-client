@@ -12,7 +12,6 @@ permissions:
   id-token: write
 
 jobs:
-  # Job para crear release y publicar en PyPI
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
