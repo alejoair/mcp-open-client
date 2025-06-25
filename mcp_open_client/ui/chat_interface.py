@@ -39,13 +39,13 @@ def create_chat_interface(container):
                 set_stats_update_callback(stats_container.update_stats)
                 
                 # CONTENT SECTION - Expandable middle area with fixed height
-                with ui.tab_panels(tabs, value=chat_tab).classes('w-full mx-auto flex-grow items-stretch'):
+                with ui.tab_panels(tabs, value=chat_tab).classes('w-full flex-grow items-stretch'):
                     
                     # Chat Panel - Message container with scroll
                     with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
 
                         with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
-                            message_container = ui.column().classes('w-full gap-2')
+                            message_container = ui.column().classes('w-full gap-1')
                             
                             # Load messages from current conversation
                             load_conversation_messages(message_container)
@@ -63,7 +63,7 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('w-full items-center gap-3 shrink-0 p-2'):
+                with ui.row().classes('w-full items-center gap-3 shrink-0 p-1'):
                     text_input = ui.textarea(placeholder='Type your message...').props('outlined autogrow input-style="max-height: 120px;"').classes('flex-grow min-h-12 rounded-lg')
                     
                     # Create async wrapper functions for the event handlers

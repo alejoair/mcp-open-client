@@ -130,7 +130,8 @@ class ConversationManager:
             # Conversations list
             ui.separator().classes('mb-4')
             
-            with ui.scroll_area().classes('w-full flex-1'):
+            # Scroll area with fixed height - following NiceGUI best practices
+            with ui.scroll_area().classes('w-full').style('height: 400px; max-height: calc(100vh - 250px);') as scroll_area:
                 self._conversations_container = ui.column().classes('w-full')
                 self._populate_conversations_list()
 

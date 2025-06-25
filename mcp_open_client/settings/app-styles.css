@@ -76,3 +76,35 @@
    Global Styles
    ======================================== */
 
+/* Remove lateral margins from chat container */
+.chat-container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Ensure full width for chat messages */
+.chat-messages {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Remove padding from message containers */
+.user-message,
+.assistant-message {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Remove default NiceGUI padding */
+.q-tab-panel {
+    padding: 0 !important;
+}
+
+.q-scrollarea {
+    padding: 0 !important;
+}
+

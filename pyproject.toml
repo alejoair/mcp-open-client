@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-open-client"
-version = "0.4.6"
+version = "0.4.7"
 description = "A modern, web-based chat application implementing the Model Context Protocol (MCP) for seamless LLM-tool integration"
 authors = [{name = "alejoair", email = "your.email@example.com"}]
 license = {text = "MIT"}
@@ -71,7 +71,7 @@ mcp_open_client = [
 
 # Tool configurations
 [tool.mypy]
-python_version = "3.8"
+python_version = "0.4.7"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

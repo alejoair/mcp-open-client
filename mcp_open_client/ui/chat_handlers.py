@@ -152,14 +152,14 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('user-message message-bubble ml-auto mb-4 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
+            with ui.card().classes('user-message message-bubble ml-auto mb-2 mr-0 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
                 parse_and_render_message(content, user_card)
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-4 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
+            with ui.card().classes('assistant-message message-bubble mb-2 ml-0 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
                 if content:
                     parse_and_render_message(content, bot_card)
                 
