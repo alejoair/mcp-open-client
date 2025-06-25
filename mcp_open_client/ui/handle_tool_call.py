@@ -314,11 +314,13 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                     name = tool.name
                     description = tool.description
                     input_schema = tool.inputSchema
+                    print(f"DEBUG: Tool {name} - inputSchema type: {type(input_schema)}, value: {input_schema}")
                 else:
                     # Dict format
                     name = tool.get("name", "")
                     description = tool.get("description", "")
                     input_schema = tool.get("inputSchema")
+                    print(f"DEBUG: Tool {name} (dict) - inputSchema type: {type(input_schema)}, value: {input_schema}")
                 
                 openai_tool = {
                     "type": "function",
@@ -328,9 +330,17 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                     }
                 }
                 
-                # Add parameters if available
-                if input_schema:
+                # Add parameters - always provide a valid schema
+                if input_schema and isinstance(input_schema, dict):
                     openai_tool["function"]["parameters"] = input_schema
+                else:
+                    # Provide default empty schema if none available
+                    openai_tool["function"]["parameters"] = {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                
                 openai_tools.append(openai_tool)
                 logger.debug(f"Converted tool: {name}")
                 

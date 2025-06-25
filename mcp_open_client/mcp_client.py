@@ -170,7 +170,11 @@ class MCPClientManager:
                     try:
                         if op_type == "list_tools":
                             result = await client.list_tools()
-                            results.append([{"name": t.name, "description": getattr(t, 'description', '')} for t in result])
+                            results.append([{
+                                "name": t.name,
+                                "description": getattr(t, 'description', ''),
+                                "inputSchema": getattr(t, 'inputSchema', None)
+                            } for t in result])
                         
                         elif op_type == "list_resources":
                             result = await client.list_resources()

@@ -12,9 +12,9 @@ class HistoryManager:
     Gestiona el historial de conversaciones con límites de caracteres y optimizaciones
     """
     
-    def __init__(self, 
-                 max_tokens_per_message: int = 1200,        # ~5000 chars
-                 max_tokens_per_conversation: int = 12000):  # ~50000 chars
+    def __init__(self,
+                 max_tokens_per_message: int = 10000,       # ~40000 chars
+                 max_tokens_per_conversation: int = 1000000):  # ~4M chars (1M tokens)
         """
         Inicializa el gestor de historial
         
@@ -43,9 +43,17 @@ class HistoryManager:
     def _ensure_token_attributes(self):
         """Ensure token attributes exist for backward compatibility"""
         if not hasattr(self, 'max_tokens_per_message'):
-            self.max_tokens_per_message = getattr(self, 'max_chars_per_message', 5000) // 4
+            # Default to 2500 tokens (~10000 chars) if no previous value exists
+            self.max_tokens_per_message = getattr(self, 'max_tokens_per_message', 2500)
         if not hasattr(self, 'max_tokens_per_conversation'):
-            self.max_tokens_per_conversation = getattr(self, 'max_chars_per_conversation', 50000) // 4
+            # Default to 12500 tokens (~50000 chars) if no previous value exists
+            self.max_tokens_per_conversation = getattr(self, 'max_tokens_per_conversation', 12500)
+        
+        # Ensure char attributes are synchronized with token attributes
+        if not hasattr(self, 'max_chars_per_message'):
+            self.max_chars_per_message = self.max_tokens_per_message * 4
+        if not hasattr(self, 'max_chars_per_conversation'):
+            self.max_chars_per_conversation = self.max_tokens_per_conversation * 4
     
     def estimate_tokens(self, text: str) -> int:
         """Estima tokens de forma inteligente basado en el tipo de contenido"""
@@ -241,21 +249,42 @@ class HistoryManager:
                 processed_message['_truncated'] = True
                 processed_message['_original_length'] = len(original_content)
         
-        # Procesar tool calls si están presentes
+        # Procesar tool calls si están presentes con validación mejorada
         if 'tool_calls' in processed_message and self.settings['preserve_tool_calls']:
             processed_tool_calls = []
             for tool_call in processed_message['tool_calls']:
-                processed_tool_call = tool_call.copy()
-                
-                # Truncar argumentos si son muy largos usando método seguro
-                if 'function' in processed_tool_call and 'arguments' in processed_tool_call['function']:
-                    args_str = processed_tool_call['function']['arguments']
-                    if len(args_str) > 1000:  # Límite para argumentos
-                        processed_tool_call['function']['arguments'] = self._safe_truncate_json_arguments(args_str, 1000)
-                
-                processed_tool_calls.append(processed_tool_call)
+                # Validar estructura del tool call
+                if (isinstance(tool_call, dict) and
+                    'id' in tool_call and
+                    'function' in tool_call and
+                    isinstance(tool_call['function'], dict) and
+                    'name' in tool_call['function']):
+                    
+                    processed_tool_call = tool_call.copy()
+                    
+                    # Truncar argumentos si son muy largos usando método seguro
+                    if 'arguments' in processed_tool_call['function']:
+                        args_str = processed_tool_call['function']['arguments']
+                        if len(args_str) > 1000:  # Límite para argumentos
+                            processed_tool_call['function']['arguments'] = self._safe_truncate_json_arguments(args_str, 1000)
+                    
+                    processed_tool_calls.append(processed_tool_call)
+                else:
+                    print(f"Warning: Removing invalid tool call during storage: {tool_call}")
             
-            processed_message['tool_calls'] = processed_tool_calls
+            if processed_tool_calls:
+                processed_message['tool_calls'] = processed_tool_calls
+            else:
+                # Remover tool_calls si ninguno es válido
+                processed_message.pop('tool_calls', None)
+        
+        # Validar mensajes de tool result
+        if processed_message.get('role') == 'tool':
+            if not processed_message.get('tool_call_id'):
+                print(f"Warning: Tool result message missing tool_call_id")
+                return None  # Señal para omitir este mensaje
+            if not processed_message.get('content'):
+                processed_message['content'] = '[Empty tool result]'
         
         return processed_message
     
