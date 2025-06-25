@@ -255,6 +255,18 @@ def setup_ui():
         ui.add_head_html('<meta name="apple-mobile-web-app-capable" content="yes">')
         ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
         ui.add_css(os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css'))
+        
+        # Configure NiceGUI color theme to match our brand
+        ui.colors(
+            primary='#dc2626',      # Red to match favicon
+            secondary='#1f2937',    # Dark gray
+            accent='#3b82f6',       # Blue accent
+            positive='#10b981',     # Green for success
+            negative='#ef4444',     # Red for errors
+            info='#3b82f6',         # Blue for info
+            warning='#f59e0b'       # Orange for warnings
+        )
+        
         # Initialize storage first
         init_storage()
         
@@ -411,12 +423,23 @@ def cli_entry():
 # Setup UI when module is imported
 setup_ui()
 
+# Custom favicon - M letter in red with white background
+favicon_svg = '''
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <rect width="200" height="200" fill="white" stroke="#cccccc" stroke-width="2"/>
+        <text x="100" y="140" font-family="Arial, sans-serif" font-size="120" font-weight="bold"
+              text-anchor="middle" fill="#dc2626">M</text>
+    </svg>
+'''
+
 # Run the server - this needs to be at module level for entry points
 ui.run(
+    title="MCP Open Client",
     storage_secret="ultrasecretkeyboard",
     port=8090,
     reload=False,
     dark=True,
     show_welcome_message=True,
-    show=False
+    show=False,
+    favicon=favicon_svg
 )
