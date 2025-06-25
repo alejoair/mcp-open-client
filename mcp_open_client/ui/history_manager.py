@@ -249,21 +249,42 @@ class HistoryManager:
                 processed_message['_truncated'] = True
                 processed_message['_original_length'] = len(original_content)
         
-        # Procesar tool calls si están presentes
+        # Procesar tool calls si están presentes con validación mejorada
         if 'tool_calls' in processed_message and self.settings['preserve_tool_calls']:
             processed_tool_calls = []
             for tool_call in processed_message['tool_calls']:
-                processed_tool_call = tool_call.copy()
-                
-                # Truncar argumentos si son muy largos usando método seguro
-                if 'function' in processed_tool_call and 'arguments' in processed_tool_call['function']:
-                    args_str = processed_tool_call['function']['arguments']
-                    if len(args_str) > 1000:  # Límite para argumentos
-                        processed_tool_call['function']['arguments'] = self._safe_truncate_json_arguments(args_str, 1000)
-                
-                processed_tool_calls.append(processed_tool_call)
+                # Validar estructura del tool call
+                if (isinstance(tool_call, dict) and
+                    'id' in tool_call and
+                    'function' in tool_call and
+                    isinstance(tool_call['function'], dict) and
+                    'name' in tool_call['function']):
+                    
+                    processed_tool_call = tool_call.copy()
+                    
+                    # Truncar argumentos si son muy largos usando método seguro
+                    if 'arguments' in processed_tool_call['function']:
+                        args_str = processed_tool_call['function']['arguments']
+                        if len(args_str) > 1000:  # Límite para argumentos
+                            processed_tool_call['function']['arguments'] = self._safe_truncate_json_arguments(args_str, 1000)
+                    
+                    processed_tool_calls.append(processed_tool_call)
+                else:
+                    print(f"Warning: Removing invalid tool call during storage: {tool_call}")
             
-            processed_message['tool_calls'] = processed_tool_calls
+            if processed_tool_calls:
+                processed_message['tool_calls'] = processed_tool_calls
+            else:
+                # Remover tool_calls si ninguno es válido
+                processed_message.pop('tool_calls', None)
+        
+        # Validar mensajes de tool result
+        if processed_message.get('role') == 'tool':
+            if not processed_message.get('tool_call_id'):
+                print(f"Warning: Tool result message missing tool_call_id")
+                return None  # Señal para omitir este mensaje
+            if not processed_message.get('content'):
+                processed_message['content'] = '[Empty tool result]'
         
         return processed_message
     

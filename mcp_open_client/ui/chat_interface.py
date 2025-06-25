@@ -1,10 +1,14 @@
 from nicegui import ui
 from mcp_open_client.api_client import APIClient
 from .message_parser import parse_and_render_message
-from .chat_handlers import handle_send, get_messages, get_current_conversation_id, render_message_to_ui, set_stats_update_callback
+from .chat_handlers import handle_send, get_messages, get_current_conversation_id, render_message_to_ui, set_stats_update_callback, set_stop_generation
 from .history_manager import history_manager
 from .conversation_manager import conversation_manager
+import asyncio
 
+# Global variable to track generation state
+generation_active = False
+stop_generation = False
 
 def create_chat_interface(container):
     """
@@ -64,13 +68,52 @@ def create_chat_interface(container):
                     
                     # Create async wrapper functions for the event handlers
                     async def send_message():
-                        if text_input.value and text_input.value.strip():
-                            await handle_send(text_input, message_container, api_client, scroll_area)
+                        global generation_active, stop_generation
+                        if not generation_active and text_input.value and text_input.value.strip():
+                            # Start generation
+                            generation_active = True
+                            stop_generation = False
+                            
+                            # Change button to stop mode
+                            send_button.props('color=negative icon=stop')
+                            send_button.tooltip = 'Stop generation'
+                            text_input.props('disable')
+                            
+                            try:
+                                await handle_send(text_input, message_container, api_client, scroll_area, send_button)
+                            finally:
+                                # Reset button to send mode
+                                generation_active = False
+                                send_button.props('color=primary icon=send')
+                                send_button.tooltip = 'Send message'
+                                text_input.props(remove='disable')
                     
-                    send_button = ui.button(icon='send', on_click=send_message).classes('h-12 w-12 min-w-12 rounded-full').props('color=primary')
+                    async def stop_generation_handler():
+                        global stop_generation
+                        if generation_active:
+                            stop_generation = True
+                            set_stop_generation()  # Notify chat_handlers
+                            # Reset button immediately
+                            send_button.props('color=primary icon=send')
+                            send_button.tooltip = 'Send message'
+                            text_input.props(remove='disable')
                     
-                    # Enable sending with Enter key
-                    text_input.on('keydown.enter', send_message)
+                    # Button that changes function based on state
+                    async def button_click():
+                        if generation_active:
+                            await stop_generation_handler()
+                        else:
+                            await send_message()
+                    
+                    send_button = ui.button(icon='send', on_click=button_click).classes('h-12 w-12 min-w-12 rounded-full').props('color=primary')
+                    send_button.tooltip = 'Send message'
+                    
+                    # Enable sending with Enter key (only when not generating)
+                    async def handle_enter():
+                        if not generation_active:
+                            await send_message()
+                    
+                    text_input.on('keydown.enter', handle_enter)
                     
 
 
