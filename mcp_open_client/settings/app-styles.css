@@ -102,9 +102,316 @@
 /* Remove default NiceGUI padding */
 .q-tab-panel {
     padding: 0 !important;
+    margin: 0 !important;
 }
 
 .q-scrollarea {
     padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Ensure main content areas have no padding/margin */
+.main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove any default spacing from tab panels */
+.q-tab-panels {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove padding from all card elements in chat */
+.chat-container .q-card {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Force zero padding/margin on most chat elements */
+.chat-container * {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Add small horizontal padding to chat container */
+.chat-container {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* SUPER SPECIFIC: Force padding on the actual chat container class */
+ui-column.chat-container,
+.q-column.chat-container,
+div.chat-container {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Ensure all chat-related UI elements are transparent */
+.chat-container .q-column,
+.chat-container .q-tab-panels,
+.chat-container .q-tab-panel {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Remove padding from message area but keep container padding */
+.chat-messages,
+.chat-messages * {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Add small horizontal padding to message bubbles */
+.message-bubble,
+.user-message,
+.assistant-message {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Override NiceGUI default spacing */
+.q-page,
+.nicegui-content {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove any flex gaps that might add spacing */
+.chat-container .q-column {
+    gap: 0 !important;
+}
+
+/* Force zero padding/margin on NiceGUI layout elements */
+.q-layout,
+.q-layout-container,
+.q-drawer-container,
+.q-page-container,
+.q-page,
+.nicegui-content,
+.main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove drawer padding */
+.nav-drawer,
+.q-drawer {
+    padding: 0 !important;
+}
+
+/* Force header to have no padding */
+.app-header,
+.q-header {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Remove padding/margin from input area */
+.q-textarea,
+.q-field,
+.q-field__control,
+.q-field__native,
+input[type="text"],
+textarea {
+    margin: 0 !important;
+    padding: 8px !important; /* Keep minimal internal padding for usability */
+}
+
+/* Remove bottom spacing from input container */
+.q-field__bottom,
+.q-field__messages {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+}
+
+/* Force the input row container to have no bottom margin */
+.chat-container > .q-column > .q-row:last-child {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* AGGRESSIVE: Force all bottom spacing to zero */
+body,
+html,
+#app,
+.q-app,
+.q-layout,
+.q-page-container,
+.q-page,
+.nicegui-content {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* SUPER AGGRESSIVE: Target all possible input bottom spacing */
+.q-field--outlined .q-field__control:after,
+.q-field--outlined .q-field__control:before,
+.q-field__bottom,
+.q-field__messages,
+.q-field__counter,
+.q-textarea .q-field__bottom,
+.q-input .q-field__bottom {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Force chat container to be completely flush */
+.chat-container {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+}
+
+/* Ensure no bottom spacing on the entire layout */
+* {
+    margin-bottom: 0 !important;
+}
+
+/* Override any Quasar bottom spacing */
+.q-field--outlined,
+.q-textarea,
+.q-input {
+    margin-bottom: 0 !important;
+}
+
+/* Force the input area to stick to bottom */
+.chat-container > .q-column {
+    height: 100% !important;
+    justify-content: flex-end !important;
+}
+
+/* CRITICAL: Force tool calls to respect container width */
+.q-expansion-item,
+.q-expansion-item__container,
+.q-expansion-item__content {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+/* Force all code blocks to respect width */
+code,
+pre,
+.q-code,
+.hljs {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-wrap: break-word !important;
+    word-wrap: break-word !important;
+    white-space: pre-wrap !important;
+    box-sizing: border-box !important;
+}
+
+/* Specifically target tool response content */
+.q-expansion-item pre,
+.q-expansion-item code {
+    max-width: calc(100vw - 48px) !important; /* Account for container padding */
+    overflow-x: auto !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+}
+
+/* Force any HTML content to respect boundaries */
+.q-expansion-item div {
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+
+/* ========================================
+   Chat Input Field Styling
+   ======================================== */
+
+/* Chat input field with reddish border - high specificity */
+.chat-container .chat-input-field.q-textarea .q-field--outlined .q-field__control,
+.chat-container .chat-input-field .q-field--outlined .q-field__control {
+    border: 2px solid #dc2626 !important;
+    border-radius: 8px !important;
+}
+
+/* Override existing border styles for chat input */
+.chat-container .chat-input-field.q-textarea .q-field--outlined .q-field__control:before,
+.chat-container .chat-input-field.q-textarea .q-field--outlined .q-field__control:after {
+    border: 2px solid #dc2626 !important;
+}
+
+/* Focus state for chat input */
+.chat-container .chat-input-field.q-textarea .q-field--outlined.q-field--focused .q-field__control,
+.chat-container .chat-input-field .q-field--outlined.q-field--focused .q-field__control {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2) !important;
+}
+
+/* Hover state for chat input */
+.chat-container .chat-input-field.q-textarea .q-field--outlined:hover .q-field__control,
+.chat-container .chat-input-field .q-field--outlined:hover .q-field__control {
+    border-color: #ef4444 !important;
+}
+
+/* Additional specificity for textarea */
+.chat-container .chat-input-field.q-textarea {
+    border: 2px solid #dc2626 !important;
+    border-radius: 8px !important;
+}
+
+/* Alternative approach - direct styling */
+.chat-input-field {
+    border: 2px solid #dc2626 !important;
+    border-radius: 8px !important;
+    margin-bottom: 16px !important;
+}
+
+.chat-input-field:focus {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2) !important;
+}
+
+.chat-input-field:hover {
+    border-color: #ef4444 !important;
+}
+
+/* Reduce height of chat input field */
+.chat-input-field .q-field__control {
+    min-height: 40px !important;
+    max-height: 40px !important;
+}
+
+.chat-input-field .q-field__native {
+    min-height: 24px !important;
+    max-height: 70px !important;
+    padding: 6px 12px !important;
+}
+
+/* Override any existing height settings */
+.chat-container .chat-input-field {
+    margin-bottom: 16px !important;
+}
+
+.chat-container .chat-input-field .q-textarea {
+    min-height: 48px !important;
+}
+
+.chat-container .chat-input-field.q-textarea .q-field__control {
+    min-height: 48px !important;
 }
 

@@ -298,7 +298,7 @@ def setup_ui():
         def is_active(section):
             return 'active' if section == active_section else ''
         
-        content_container = ui.row().classes('main-content h-full w-full')
+        content_container = ui.row().classes('main-content w-full').style('height: 100vh; margin: 0; padding: 0;')
         
         def update_content(section):
             nonlocal active_section
@@ -326,7 +326,7 @@ def setup_ui():
         
         with ui.header(elevated=False).classes('app-header'):
             with ui.row().classes('items-center full-width no-wrap header-row'):
-                with ui.row().classes('items-center no-wrap gap-2 header-left'):
+                with ui.row().classes('items-center no-wrap header-left'):
                     ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').classes('header-btn text-white').props('flat dense')
                     ui.label('MCP-Open-Client').classes('app-title text-subtitle1')
                 
@@ -335,7 +335,7 @@ def setup_ui():
                 with ui.row().classes('header-actions items-center no-wrap'):
                     ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn text-white').props('flat dense').tooltip('User Account')
         
-        with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer q-pa-md') as left_drawer:
+        with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
             
             def handle_navigation(section):
@@ -344,7 +344,7 @@ def setup_ui():
                 # Auto-close drawer on mobile after selection
                 left_drawer.set_value(False)  # Close drawer
             
-            with ui.column().classes('w-full gap-2'):
+            with ui.column().classes('w-full'):
                 # Home button
                 ui.button(
                     'Home',

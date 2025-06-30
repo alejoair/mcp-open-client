@@ -27,7 +27,7 @@ def create_chat_interface(container):
     ui.query('.nicegui-content').classes('w-full')
     
     # Main layout container - optimized for mobile
-    with ui.column().classes('chat-container h-full w-full flex flex-col'):
+    with ui.column().classes('chat-container h-full w-full flex flex-col').style('padding-left: 12px; padding-right: 12px; box-sizing: border-box; background: transparent;'):
                 
                 # TABS SECTION - Fixed at top (optional, can be hidden on mobile)
                 with ui.tabs().classes('w-full shrink-0') as tabs:
@@ -45,7 +45,7 @@ def create_chat_interface(container):
                     with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
 
                         with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
-                            message_container = ui.column().classes('w-full gap-1')
+                            message_container = ui.column().classes('w-full')
                             
                             # Load messages from current conversation
                             load_conversation_messages(message_container)
@@ -63,8 +63,8 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('w-full items-center gap-3 shrink-0 p-1'):
-                    text_input = ui.textarea(placeholder='Type your message...').props('outlined autogrow input-style="max-height: 120px;"').classes('flex-grow min-h-12 rounded-lg')
+                with ui.row().classes('w-full items-center shrink-0'):
+                    text_input = ui.textarea(placeholder='Type your message...').props('outlined autogrow input-style="max-height: 80px;"').classes('flex-grow rounded-lg chat-input-field')
                     
                     # Create async wrapper functions for the event handlers
                     async def send_message():

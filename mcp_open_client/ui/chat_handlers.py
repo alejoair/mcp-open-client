@@ -152,14 +152,14 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('user-message message-bubble ml-auto mb-2 mr-0 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
+            with ui.card().classes('user-message message-bubble mb-2 max-w-4xl bg-blue-900/20 border-l-4 border-blue-400') as user_card:
                 parse_and_render_message(content, user_card)
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-2 ml-0 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
+            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl bg-gray-800/30 border-l-4 border-gray-500') as bot_card:
                 if content:
                     parse_and_render_message(content, bot_card)
                 
@@ -181,10 +181,8 @@ def render_message_to_ui(message: dict, message_container) -> None:
                         
                         with ui.expansion(f"{tool_name}",
                                         icon=None,
-                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 mb-2 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"'):
+                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 mb-2 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"').style('max-width: 100%; box-sizing: border-box;'):
                             # Tool Call Section
-                            ui.label('Call:').classes('font-semibold text-blue-300 mt-1')
-                            ui.code(tool_name, language='text').classes('w-full overflow-x-auto')
                             ui.label('Arguments:').classes('font-semibold text-blue-300')
                             try:
                                 # Try to format JSON arguments nicely
@@ -200,8 +198,8 @@ def render_message_to_ui(message: dict, message_container) -> None:
                                 # Use HTML with strict width control to prevent horizontal expansion
                                 import html
                                 escaped_response = html.escape(tool_response)
-                                ui.html(f'''<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box;">
-                                    <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; width: 100%; max-width: 100%; margin: 0; padding: 0.5rem; background: transparent; font-family: monospace; font-size: 0.875rem; overflow: hidden; box-sizing: border-box;">{escaped_response}</pre>
+                                ui.html(f'''<div style="width: 100%; max-width: calc(100vw - 48px); overflow: hidden; box-sizing: border-box;">
+                                    <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; width: 100%; max-width: 100%; margin: 0; padding: 0.5rem; background: transparent; font-family: monospace; font-size: 0.875rem; overflow-x: auto; box-sizing: border-box; word-break: break-all;">{escaped_response}</pre>
                                 </div>''')
         elif role == 'tool':
             # Skip individual tool messages - they're now grouped with assistant messages
