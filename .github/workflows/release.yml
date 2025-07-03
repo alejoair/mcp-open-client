@@ -29,14 +29,29 @@ jobs:
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build twine
+        pip install build twine tomli
     
-    - name: Get version from pyproject.toml
+    - name: Get and bump version
       id: get_version
       run: |
-        VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || python -c "import tomli; print(tomli.load(open('pyproject.toml', 'rb'))['project']['version'])")
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+        # Get current version
+        CURRENT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || python -c "import tomli; print(tomli.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        
+        # Parse version parts (assuming semantic versioning: X.Y.Z)
+        IFS='.' read -r -a version_parts <<< "$CURRENT_VERSION"
+        major=${version_parts[0]}
+        minor=${version_parts[1]}
+        patch=${version_parts[2]}
+        
+        # Increment patch version
+        new_patch=$((patch + 1))
+        NEW_VERSION="${major}.${minor}.${new_patch}"
+        
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+        
+        echo "Version bump: $CURRENT_VERSION → $NEW_VERSION"
     
     - name: Check if tag exists
       id: check_tag
@@ -46,6 +61,26 @@ jobs:
         else
           echo "exists=false" >> $GITHUB_OUTPUT
         fi
+    
+    - name: Update version in pyproject.toml
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        # Update version in pyproject.toml
+        sed -i 's/version = "${{ steps.get_version.outputs.current_version }}"/version = "${{ steps.get_version.outputs.new_version }}"/g' pyproject.toml
+        
+        # Also fix the mypy python_version field (it seems to have the wrong value)
+        sed -i 's/python_version = "${{ steps.get_version.outputs.current_version }}"/python_version = "3.12"/g' pyproject.toml
+        
+        echo "Updated pyproject.toml with new version: ${{ steps.get_version.outputs.new_version }}"
+    
+    - name: Commit version bump
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add pyproject.toml
+        git commit -m "chore: bump version to ${{ steps.get_version.outputs.new_version }}"
+        git push origin master
     
     - name: Create Git Tag
       if: steps.check_tag.outputs.exists == 'false'
@@ -65,22 +100,20 @@ jobs:
     
     - name: Create GitHub Release
       if: steps.check_tag.outputs.exists == 'false'
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_version.outputs.tag }}
-        release_name: Release ${{ steps.get_version.outputs.tag }}
+        name: Release ${{ steps.get_version.outputs.tag }}
         body: |
-          ## 🚀 Release ${{ steps.get_version.outputs.version }}
+          ## 🚀 Release ${{ steps.get_version.outputs.new_version }}
           
           ### Changes in this release:
           - Automated release from master branch
-          - Updated to version ${{ steps.get_version.outputs.version }}
+          - Version bump: ${{ steps.get_version.outputs.current_version }} → ${{ steps.get_version.outputs.new_version }}
           
           ### Installation:
           ```bash
-          pip install mcp-open-client==${{ steps.get_version.outputs.version }}
+          pip install mcp-open-client==${{ steps.get_version.outputs.new_version }}
           ```
           
           ### Quick Start:
@@ -91,6 +124,7 @@ jobs:
           See the [README](https://github.com/alejoair/mcp-open-client/blob/master/README.md) for full documentation.
         draft: false
         prerelease: false
+        generate_release_notes: true
     
     - name: Publish to PyPI
       if: steps.check_tag.outputs.exists == 'false'
@@ -102,6 +136,7 @@ jobs:
     - name: Notify success
       if: steps.check_tag.outputs.exists == 'false'
       run: |
-        echo "🎉 Successfully released version ${{ steps.get_version.outputs.version }} to PyPI!"
-        echo "📦 Package: https://pypi.org/project/mcp-open-client/${{ steps.get_version.outputs.version }}/"
+        echo "🎉 Successfully released version ${{ steps.get_version.outputs.new_version }} to PyPI!"
+        echo "📦 Package: https://pypi.org/project/mcp-open-client/${{ steps.get_version.outputs.new_version }}/"
         echo "🏷️ GitHub Release: https://github.com/alejoair/mcp-open-client/releases/tag/${{ steps.get_version.outputs.tag }}"
+        echo "🔄 Version bump: ${{ steps.get_version.outputs.current_version }} → ${{ steps.get_version.outputs.new_version }}"

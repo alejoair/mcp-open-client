@@ -71,7 +71,7 @@ mcp_open_client = [
 
 # Tool configurations
 [tool.mypy]
-python_version = "0.4.7"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
