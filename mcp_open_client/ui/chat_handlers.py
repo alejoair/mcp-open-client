@@ -533,7 +533,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 
                 api_messages.append(api_msg)
             
-            # Final validation: ensure no orphaned tool results made it through (normal execution)
+            # Final validation: ensure no orphaned tool results or incomplete sequences
             api_messages = _final_tool_sequence_validation(api_messages, force_cleanup=False)
             
             # Get available MCP tools for tool calling
@@ -542,9 +542,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             
             # Call LLM with tools if available, with enhanced error handling
             try:
-                # Validate message sequence but preserve pending tool calls during normal execution
-                api_messages = _final_tool_sequence_validation(api_messages, force_cleanup=False)
-                
                 if available_tools:
                     response = await api_client.chat_completion(api_messages, tools=available_tools)
                 else:
@@ -938,16 +935,15 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
 
 def _final_tool_sequence_validation(api_messages, force_cleanup=False):
     """
-    Final validation to ensure no orphaned tool results.
-    Removes any tool messages that don't have corresponding tool calls.
-    Only removes unresolved tool calls when force_cleanup=True (stop button pressed).
+    Final validation to ensure no orphaned tool calls or results.
+    Removes orphaned tool messages and ensures complete tool call sequences.
     
     Args:
         api_messages: List of API-formatted messages
         force_cleanup: If True, removes assistant messages with unresolved tool calls
         
     Returns:
-        List of validated messages with orphaned tool results removed
+        List of validated messages ensuring complete tool call sequences
     """
     if not api_messages:
         return []
@@ -980,34 +976,55 @@ def _final_tool_sequence_validation(api_messages, force_cleanup=False):
             # Regular user/system/assistant message
             validated_messages.append(msg)
     
-    # CRITICAL: Only remove assistant messages with unresolved tool calls when force_cleanup=True
-    # This prevents removing valid tool calls that are still in progress during normal execution
-    if pending_tool_calls and force_cleanup:
+    # CRITICAL: Handle unresolved tool calls to prevent API errors
+    if pending_tool_calls:
         print(f"Final validation: Found {len(pending_tool_calls)} unresolved tool calls: {pending_tool_calls}")
-        print("Removing assistant messages with unresolved tool calls to prevent API errors")
         
-        # Remove assistant messages that have unresolved tool calls
-        final_validated_messages = []
-        for msg in validated_messages:
-            if msg.get('role') == 'assistant' and 'tool_calls' in msg:
-                # Check if this assistant message has any unresolved tool calls
-                has_unresolved = False
-                for tc in msg.get('tool_calls', []):
-                    if tc.get('id') in pending_tool_calls:
-                        has_unresolved = True
-                        break
-                
-                if has_unresolved:
-                    print(f"Removing assistant message with unresolved tool calls: {[tc.get('id') for tc in msg.get('tool_calls', [])]}")
-                    continue
+        if force_cleanup:
+            print("Removing assistant messages with unresolved tool calls to prevent API errors")
             
-            final_validated_messages.append(msg)
-        
-        validated_messages = final_validated_messages
-        print(f"Final validation: {len(api_messages)} -> {len(validated_messages)} messages")
-    elif pending_tool_calls and not force_cleanup:
-        # Just log that there are pending tool calls but don't remove them (normal execution)
-        print(f"Final validation: Found {len(pending_tool_calls)} pending tool calls (normal execution - not removing)")
+            # Remove assistant messages that have unresolved tool calls
+            final_validated_messages = []
+            for msg in validated_messages:
+                if msg.get('role') == 'assistant' and 'tool_calls' in msg:
+                    # Check if this assistant message has any unresolved tool calls
+                    has_unresolved = False
+                    for tc in msg.get('tool_calls', []):
+                        if tc.get('id') in pending_tool_calls:
+                            has_unresolved = True
+                            break
+                    
+                    if has_unresolved:
+                        print(f"Removing assistant message with unresolved tool calls: {[tc.get('id') for tc in msg.get('tool_calls', [])]}")
+                        continue
+                
+                final_validated_messages.append(msg)
+            
+            validated_messages = final_validated_messages
+            print(f"Final validation: {len(api_messages)} -> {len(validated_messages)} messages")
+        else:
+            # In normal execution, we cannot send incomplete tool call sequences to the API
+            # This will cause BadRequestError, so we must remove the incomplete sequences
+            print("WARNING: Incomplete tool call sequences detected. Removing to prevent API errors.")
+            
+            final_validated_messages = []
+            for msg in validated_messages:
+                if msg.get('role') == 'assistant' and 'tool_calls' in msg:
+                    # Check if this assistant message has any unresolved tool calls
+                    has_unresolved = False
+                    for tc in msg.get('tool_calls', []):
+                        if tc.get('id') in pending_tool_calls:
+                            has_unresolved = True
+                            break
+                    
+                    if has_unresolved:
+                        print(f"Removing assistant message with unresolved tool calls: {[tc.get('id') for tc in msg.get('tool_calls', [])]}")
+                        continue
+                
+                final_validated_messages.append(msg)
+            
+            validated_messages = final_validated_messages
+            print(f"Final validation: {len(api_messages)} -> {len(validated_messages)} messages")
     
     return validated_messages
 
