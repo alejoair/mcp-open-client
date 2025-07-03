@@ -71,8 +71,7 @@ def init_storage():
         app.storage.user['mcp-config'] = initial_configs.get("mcp-config", {"mcpServers": {}})
         print("Created default mcp-config")
     
-    # Debug: Print final user settings
-    print(f"Final user-settings in storage: {app.storage.user.get('user-settings', 'NOT FOUND')}")
+   
         
 
 async def init_mcp_client():
@@ -199,7 +198,6 @@ def populate_conversations_list(container):
                     title,
                     on_click=lambda cid=conv_id: load_conversation_and_refresh(cid)
                 ).props('flat no-caps align-left').classes(f'{button_classes} flex-1 conversation-title')
-                conv_btn.style('min-width: 0; overflow: hidden; text-overflow: ellipsis;')
                 
                 # Delete button (small)
                 ui.button(
@@ -256,6 +254,12 @@ def setup_ui():
         ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
         ui.add_css(os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css'))
         
+        # Add static route for the animated background SVG
+        app.add_static_file(
+            local_file=os.path.join(os.path.dirname(__file__), 'settings', 'animated-background.svg'),
+            url_path='/animated-background.svg'
+        )
+        
         # Configure NiceGUI color theme to match our brand
         ui.colors(
             primary='#dc2626',      # Red to match favicon
@@ -298,7 +302,7 @@ def setup_ui():
         def is_active(section):
             return 'active' if section == active_section else ''
         
-        content_container = ui.row().classes('main-content w-full').style('height: 100vh; margin: 0; padding: 0;')
+        content_container = ui.row().classes('main-content w-full')
         
         def update_content(section):
             nonlocal active_section
