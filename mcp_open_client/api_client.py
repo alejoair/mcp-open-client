@@ -57,6 +57,12 @@ class APIClient:
         logger.info(f"Updated APIClient settings")
 
     def _initialize_client(self):
+        # Only initialize client if we have the required settings
+        if not self.api_key or not self.base_url:
+            logger.warning("Cannot initialize API client: missing api_key or base_url")
+            self._client = None
+            return
+            
         self._client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -66,6 +72,9 @@ class APIClient:
         logger.info(f"Initialized APIClient with base URL: {self.base_url}")
 
     async def list_models(self) -> List[Dict[str, Any]]:
+        if not self._client:
+            raise APIClientError("API client not initialized. Please configure API key and base URL.")
+            
         try:
             logger.info("Fetching available models")
             response = await self._client.models.list()
@@ -122,6 +131,9 @@ class APIClient:
         Raises:
             APIClientError: If the request fails
         """
+        if not self._client:
+            raise APIClientError("API client not initialized. Please configure API key and base URL.")
+            
         try:
             model_to_use = model or self.model
             system_prompt_to_use = system_prompt or self.system_prompt
