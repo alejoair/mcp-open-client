@@ -65,7 +65,7 @@ class HistoryManager:
         return message
     
     def get_conversation_size(self, conversation_id: str):
-        """Get conversation size info"""
+        """Get conversation size info with improved token estimation"""
         from .chat_handlers import get_conversation_storage
         conversations = get_conversation_storage()
         
@@ -75,11 +75,81 @@ class HistoryManager:
         messages = conversations[conversation_id]['messages']
         total_chars = sum(len(msg.get('content', '') or '') for msg in messages)
         
+        # Better token estimation based on content analysis
+        total_tokens = self._estimate_tokens_from_messages(messages)
+        
         return {
-            'total_tokens': total_chars // 4,  # Rough token estimate
+            'total_tokens': total_tokens,
             'total_chars': total_chars,
             'message_count': len(messages)
         }
+    
+    def _estimate_tokens_from_messages(self, messages):
+        """Estimate tokens from messages using improved heuristics"""
+        total_tokens = 0
+        
+        for msg in messages:
+            content = msg.get('content', '') or ''
+            role = msg.get('role', 'user')
+            
+            # Base token estimation for content
+            content_tokens = self._estimate_content_tokens(content)
+            total_tokens += content_tokens
+            
+            # Add overhead for message structure
+            if role == 'system':
+                total_tokens += 3  # System message overhead
+            elif role == 'user':
+                total_tokens += 4  # User message overhead
+            elif role == 'assistant':
+                total_tokens += 3  # Assistant message overhead
+                
+                # Add tokens for tool calls if present
+                if 'tool_calls' in msg and msg['tool_calls']:
+                    for tool_call in msg['tool_calls']:
+                        total_tokens += 10  # Tool call overhead
+                        function_name = tool_call.get('function', {}).get('name', '')
+                        arguments = tool_call.get('function', {}).get('arguments', '')
+                        total_tokens += len(function_name) // 3  # Function name tokens
+                        total_tokens += self._estimate_content_tokens(arguments)
+                        
+            elif role == 'tool':
+                total_tokens += 5  # Tool response overhead
+        
+        return total_tokens
+    
+    def _estimate_content_tokens(self, content):
+        """Estimate tokens for content using improved heuristics"""
+        if not content:
+            return 0
+        
+        # Count different types of content
+        words = content.split()
+        chars = len(content)
+        
+        # Heuristic based on content analysis:
+        # - Code and technical content: ~2.5 chars per token
+        # - Natural language: ~4 chars per token
+        # - JSON/structured data: ~3 chars per token
+        
+        # Detect content type
+        if self._is_code_like(content):
+            return max(chars // 2.5, len(words) * 0.8)  # Code is more token-dense
+        elif self._is_json_like(content):
+            return max(chars // 3, len(words) * 0.9)  # JSON is structured
+        else:
+            return max(chars // 4, len(words) * 0.75)  # Natural language
+    
+    def _is_code_like(self, content):
+        """Detect if content looks like code"""
+        code_indicators = ['def ', 'function ', 'import ', 'from ', 'class ', '{', '}', '()', '=>', '===', '!==']
+        return any(indicator in content for indicator in code_indicators)
+    
+    def _is_json_like(self, content):
+        """Detect if content looks like JSON"""
+        stripped = content.strip()
+        return (stripped.startswith('{') and stripped.endswith('}')) or \
+               (stripped.startswith('[') and stripped.endswith(']'))
     
     @property
     def settings(self):

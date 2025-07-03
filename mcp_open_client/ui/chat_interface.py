@@ -183,6 +183,8 @@ def create_stats_bar():
         with ui.row().classes('items-center gap-4'):
             conv_messages_label = ui.label('0 messages').classes('text-gray-400')
             ui.separator().props('vertical')
+            conv_tokens_label = ui.label('0 tokens').classes('text-gray-400')
+            ui.separator().props('vertical')
             conv_limit_label = ui.label('0%').classes('text-gray-400')
             
     # Function to update stats
@@ -193,9 +195,9 @@ def create_stats_bar():
             conv_stats = history_manager.get_conversation_size(conv_id)
             settings = history_manager.get_settings()
             
-            # Update conversation stats - show tokens as primary
-            # Removed conv_chars_label - no longer showing character count
+            # Update conversation stats - show tokens as primary metric
             conv_messages_label.text = f"{conv_stats['message_count']} messages"
+            conv_tokens_label.text = f"{conv_stats['total_tokens']:,} tokens"
             
             # Calculate and show percentage of limit based on tokens
             token_percentage = (conv_stats['total_tokens'] / settings['max_tokens_per_conversation']) * 100
@@ -204,10 +206,13 @@ def create_stats_bar():
             # Color coding based on token percentage
             if token_percentage > 90:
                 conv_limit_label.classes('text-red-400', remove='text-yellow-400 text-gray-400')
+                conv_tokens_label.classes('text-red-400', remove='text-yellow-400 text-gray-400')
             elif token_percentage > 70:
                 conv_limit_label.classes('text-yellow-400', remove='text-red-400 text-gray-400')
+                conv_tokens_label.classes('text-yellow-400', remove='text-red-400 text-gray-400')
             else:
                 conv_limit_label.classes('text-gray-400', remove='text-red-400 text-yellow-400')
+                conv_tokens_label.classes('text-gray-400', remove='text-red-400 text-yellow-400')
             
             # Show conversation ID and chars as secondary info
             # Removed history_indicator - no longer showing conversation ID
