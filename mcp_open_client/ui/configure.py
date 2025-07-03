@@ -14,65 +14,91 @@ def get_api_client():
     return _api_client_instance
 
 def show_content(container):
+    print("DEBUG: Starting show_content function")
     container.clear()
     with container:
+        print("DEBUG: Inside container context")
         # Header section with modern styling
-        with ui.column().classes('configure-header w-full mb-6'):
-            ui.label('⚙️ CONFIGURE').classes('configure-title text-h3 font-bold mb-2')
-            ui.label('Configure your API settings and preferences.').classes('configure-subtitle text-subtitle1 text-grey-7')
-        
-        # Main configuration card
-        with ui.card().classes('configure-card w-full max-w-2xl mx-auto p-6'):
+        # Header section removed - going straight to content
+        print("DEBUG: Creating header section")
+        print("DEBUG: Header section created successfully")
+        print("DEBUG: About to create main configuration card")
+        # Main configuration card  
+        with ui.card().classes('w-full max-w-4xl q-ma-auto q-pa-lg'):
+            print("DEBUG: Inside main card context")
             # Function to get current config (always fresh from storage)
             def get_current_config():
-                return app.storage.user.get('user-settings', {})
+                try:
+                    result = app.storage.user.get('user-settings', {})
+                    print(f"DEBUG: get_current_config returned")
+                    return result
+                except Exception as e:
+                    print(f"DEBUG: Error in get_current_config: {str(e)}")
+                    return {}
 
+            print("DEBUG: About to load current configuration")
             # Load current configuration
             config = get_current_config()
+            print(f"DEBUG: Configuration loaded")
 
             # API Configuration Section
-            with ui.column().classes('configure-section mb-6'):
-                ui.label('🔑 API Configuration').classes('section-title text-h6 font-semibold mb-4')
+            print("DEBUG: Creating API Configuration section")
+            with ui.column().classes('w-full q-mb-lg'):
+                print("DEBUG: Inside API Configuration column")
+                ui.label('🔑 API Configuration').classes('text-h6 text-weight-semibold q-mb-md')
+                print("DEBUG: API Configuration label created")
                 
                 # API Key input with password toggle
-                with ui.row().classes('w-full'):
+                print("DEBUG: About to create API Key row")
+                with ui.row().classes('w-full q-col-gutter-md'):
+                    print("DEBUG: Inside API Key row")
+                    # Safe handling of API key value
+                    api_key_value = config.get('api_key', '')
+                    print(f"DEBUG: API key length: {len(api_key_value)}")
+                    # Truncate very long API keys for display
+                    if len(api_key_value) > 100:
+                        api_key_value = api_key_value[:100]
+                        print("DEBUG: API key truncated for display")
+                    print("DEBUG: About to create API key input")
                     api_key_input = ui.input(
                         label='API Key', 
-                        value=config.get('api_key', ''),
+                        value=api_key_value,
                         password=True,
                         password_toggle_button=True
-                    ).classes('configure-input flex-1')
+                    ).classes('col-12 col-sm-6')
+                    print("DEBUG: API key input created successfully")
 
-                # Base URL input  
+                print("DEBUG: About to create Base URL input")
+                # Base URL input
                 base_url_input = ui.input(
                     label='Base URL', 
                     value=config.get('base_url', 'http://192.168.58.101:8123')
-                ).classes('configure-input w-full mt-3')
+                ).classes('w-full q-mt-md')
                 
                 # Add info about refreshing models
-                with ui.row().classes('info-tip mt-3'):
-                    ui.icon('lightbulb').classes('text-amber-600 mr-2')
-                    ui.label('Click "Refresh Models" after changing API settings to load available models').classes('tip-text text-caption text-grey-7')
+                with ui.row().classes('w-full q-mt-sm items-center'):
+                    ui.icon('lightbulb').classes('q-mr-sm text-amber-6')
+                    ui.label('Click "Refresh Models" after changing API settings to load available models').classes('text-caption text-grey-7')
 
             # System Prompt Configuration Section
-            with ui.column().classes('configure-section mb-6'):
-                ui.label('🤖 System Prompt Configuration').classes('section-title text-h6 font-semibold mb-4')
+            with ui.column().classes('w-full q-mb-lg'):
+                ui.label('🤖 System Prompt Configuration').classes('text-h6 q-mb-md')
                 
                 # System prompt textarea
                 system_prompt_input = ui.textarea(
                     label='System Prompt',
                     value=config.get('system_prompt', 'You are a helpful assistant.'),
                     placeholder='Enter your system prompt here...',
-                ).classes('configure-input w-full').style('min-height: 120px')
+                ).classes('w-full').style('min-height: 120px')
                 
                 # Add info about system prompt
-                with ui.row().classes('info-tip mt-3'):
-                    ui.icon('info').classes('text-blue-600 mr-2')
-                    ui.label('The system prompt defines the AI assistant\'s behavior and personality. It will be sent as the first message in every conversation.').classes('tip-text text-caption text-grey-7')
+                with ui.row().classes('w-full q-mt-sm items-center'):
+                    ui.icon('info').classes('q-mr-sm text-blue-6')
+                    ui.label('The system prompt defines the AI assistant\'s behavior and personality. It will be sent as the first message in every conversation.').classes('text-caption text-grey-7')
 
             # Model Selection Section
-            with ui.column().classes('configure-section mb-6'):
-                ui.label('🤖 Model Selection').classes('section-title text-h6 font-semibold mb-4')
+            with ui.column().classes('w-full q-mb-lg'):
+                ui.label('🤖 Model Selection').classes('text-h6 q-mb-md')
                 
                 # Model selection - Dynamic loading
                 model_select_container = ui.column().classes('w-full')
@@ -90,9 +116,9 @@ def show_content(container):
                     
                     with model_select_container:
                         # Show loading state
-                        loading_container = ui.row().classes('w-full items-center')
+                        loading_container = ui.row().classes('w-full items-center q-pa-md')
                         with loading_container:
-                            ui.spinner('dots', size='sm')
+                            ui.spinner('dots', size='sm').classes('q-mr-sm')
                             ui.label('Loading available models...')
                         
                         # Save current config to restore later
@@ -168,12 +194,12 @@ def show_content(container):
                             label='Model', 
                             options=model_options, 
                             value=current_model
-                        ).classes('configure-input w-full')
+                        ).classes('w-full')
                         
                         # Add refresh button
-                        with ui.row().classes('w-full items-center mt-3'):
-                            ui.button('🔄 Refresh Models', on_click=load_models).classes('model-refresh-btn').props('size=sm color=secondary outline')
-                            ui.label('Reload models using current API settings').classes('text-caption text-grey-6 ml-2')
+                        with ui.row().classes('w-full items-center q-mt-md q-col-gutter-sm'):
+                            ui.button('🔄 Refresh Models', on_click=load_models).props('size=sm color=secondary outline').classes('col-auto')
+                            ui.label('Reload models using current API settings').classes('col text-caption text-grey-6')
                 
                 # Create initial model selector with defaults (no API call)
                 def create_initial_model_select():
@@ -194,16 +220,16 @@ def show_content(container):
                             label='Model', 
                             options=default_models, 
                             value=current_model
-                        ).classes('configure-input w-full')
+                        ).classes('w-full')
                         
                         # Add info and refresh button
-                        with ui.row().classes('w-full items-center mt-3'):
-                            ui.button('🔄 Load Models from API', on_click=load_models).classes('model-refresh-btn').props('size=sm color=primary outline')
-                            ui.label('Click to load available models from your API').classes('text-caption text-grey-6 ml-2')
+                        with ui.row().classes('w-full items-center q-mt-md q-col-gutter-sm'):
+                            ui.button('🔄 Load Models from API', on_click=load_models).props('size=sm color=primary outline').classes('col-auto')
+                            ui.label('Click to load available models from your API').classes('col text-caption text-grey-6')
                         
-                        with ui.row().classes('info-tip mt-2'):
-                            ui.icon('info').classes('text-blue-600 mr-2')
-                            ui.label('Using default models. Click "Load Models from API" to get models from your server.').classes('tip-text text-caption text-grey-7')
+                        with ui.row().classes('w-full q-mt-sm items-center'):
+                            ui.icon('info').classes('q-mr-sm text-blue-6')
+                            ui.label('Using default models. Click "Load Models from API" to get models from your server.').classes('text-caption text-grey-7')
                 
                 # Create initial state
                 create_initial_model_select()
@@ -288,19 +314,19 @@ def show_content(container):
                     ui.notify(f'Error resetting configuration: {str(e)}', color='negative')
 
             def confirm_reset():
-                with ui.dialog() as dialog, ui.card().classes('configure-dialog'):
-                    with ui.column().classes('items-center text-center'):
-                        ui.icon('warning', size='lg').classes('text-orange-600 mb-2')
-                        ui.label('Reset to Factory Settings').classes('text-h6 font-bold mb-2')
-                        ui.label('This will overwrite your current configuration with the factory defaults.').classes('text-body2 text-grey-7 mb-4')
+                with ui.dialog() as dialog, ui.card().classes('q-pa-lg'):
+                    with ui.column().classes('items-center text-center q-gutter-md'):
+                        ui.icon('warning', size='lg').classes('text-orange-6')
+                        ui.label('Reset to Factory Settings').classes('text-h6 text-weight-bold')
+                        ui.label('This will overwrite your current configuration with the factory defaults.').classes('text-body2 text-grey-7')
                         
-                        with ui.row().classes('gap-3'):
-                            ui.button('Cancel', on_click=dialog.close).classes('reset-cancel-btn').props('color=secondary outline')
-                            ui.button('🔄 Confirm Reset', on_click=lambda: [reset_to_factory(), dialog.close()]).classes('reset-confirm-btn').props('color=negative')
+                        with ui.row().classes('q-gutter-md justify-center'):
+                            ui.button('Cancel', on_click=dialog.close).props('color=secondary outline')
+                            ui.button('🔄 Confirm Reset', on_click=lambda: [reset_to_factory(), dialog.close()]).props('color=negative')
                 dialog.open()
 
             # Action buttons section
-            with ui.column().classes('configure-actions mt-8'):
-                with ui.row().classes('w-full gap-4 justify-center'):
-                    ui.button('💾 Save Configuration', on_click=save_config).classes('save-btn').props('color=primary size=lg')
-                    ui.button('🔄 Reset to Factory Settings', on_click=confirm_reset).classes('reset-btn').props('color=secondary size=lg outline')
+            with ui.column().classes('w-full q-mt-xl'):
+                with ui.row().classes('w-full q-gutter-md justify-center flex-wrap'):
+                    ui.button('💾 Save Configuration', on_click=save_config).props('color=primary size=lg').classes('col-12 col-sm-auto')
+                    ui.button('🔄 Reset to Factory Settings', on_click=confirm_reset).props('color=secondary size=lg outline').classes('col-12 col-sm-auto')

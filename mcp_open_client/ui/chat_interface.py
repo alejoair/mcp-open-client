@@ -27,10 +27,10 @@ def create_chat_interface(container):
     ui.query('.nicegui-content').classes('w-full')
     
     # Main layout container - optimized for mobile
-    with ui.column().classes('chat-container h-full w-full flex flex-col').style('padding-left: 12px; padding-right: 12px; box-sizing: border-box; background: transparent;'):
+    with ui.column().classes('chat-container h-full w-full flex flex-col').style('box-sizing: border-box; background: transparent;'):
                 
                 # TABS SECTION - Fixed at top (optional, can be hidden on mobile)
-                with ui.tabs().classes('w-full shrink-0') as tabs:
+                with ui.tabs().classes('w-full shrink-0').style('display: none;') as tabs:
                     chat_tab = ui.tab('Chat')
                 
                 # STATS SECTION - Conversation statistics bar
@@ -63,7 +63,7 @@ def create_chat_interface(container):
                 conversation_manager.set_refresh_callback(refresh_chat)
 
                 # SEND MESSAGE SECTION - Fixed at bottom, mobile optimized
-                with ui.row().classes('w-full items-center shrink-0'):
+                with ui.row().classes('w-full items-center shrink-0 input-row'):
                     text_input = ui.textarea(placeholder='Type your message...').props('outlined autogrow input-style="max-height: 80px;"').classes('flex-grow rounded-lg chat-input-field')
                     
                     # Create async wrapper functions for the event handlers
@@ -181,15 +181,11 @@ def create_stats_bar():
     with ui.row().classes('w-full bg-gray-800/20 border-b border-gray-700 p-2 items-center justify-between text-xs') as stats_container:
         # Left side - Conversation stats
         with ui.row().classes('items-center gap-4'):
-            conv_chars_label = ui.label('0 chars').classes('text-gray-400')
-            ui.separator().props('vertical')
             conv_messages_label = ui.label('0 messages').classes('text-gray-400')
             ui.separator().props('vertical')
+            conv_tokens_label = ui.label('0 tokens').classes('text-gray-400')
+            ui.separator().props('vertical')
             conv_limit_label = ui.label('0%').classes('text-gray-400')
-        
-        # Right side - Conversation ID indicator
-        with ui.row().classes('items-center gap-2'):
-            history_indicator = ui.label('').classes('text-gray-500 text-xs')
             
     # Function to update stats
     def update_stats():
@@ -199,9 +195,9 @@ def create_stats_bar():
             conv_stats = history_manager.get_conversation_size(conv_id)
             settings = history_manager.get_settings()
             
-            # Update conversation stats - show tokens as primary
-            conv_chars_label.text = f"{conv_stats['total_tokens']:,} tokens"
+            # Update conversation stats - show tokens as primary metric
             conv_messages_label.text = f"{conv_stats['message_count']} messages"
+            conv_tokens_label.text = f"{conv_stats['total_tokens']:,} tokens"
             
             # Calculate and show percentage of limit based on tokens
             token_percentage = (conv_stats['total_tokens'] / settings['max_tokens_per_conversation']) * 100
@@ -210,19 +206,20 @@ def create_stats_bar():
             # Color coding based on token percentage
             if token_percentage > 90:
                 conv_limit_label.classes('text-red-400', remove='text-yellow-400 text-gray-400')
+                conv_tokens_label.classes('text-red-400', remove='text-yellow-400 text-gray-400')
             elif token_percentage > 70:
                 conv_limit_label.classes('text-yellow-400', remove='text-red-400 text-gray-400')
+                conv_tokens_label.classes('text-yellow-400', remove='text-red-400 text-gray-400')
             else:
                 conv_limit_label.classes('text-gray-400', remove='text-red-400 text-yellow-400')
+                conv_tokens_label.classes('text-gray-400', remove='text-red-400 text-yellow-400')
             
             # Show conversation ID and chars as secondary info
-            history_indicator.text = f"ID: {conv_id[:8]}... | {conv_stats['total_chars']:,} chars"
+            # Removed history_indicator - no longer showing conversation ID
         else:
             # No active conversation
-            conv_chars_label.text = "No conversation"
             conv_messages_label.text = ""
             conv_limit_label.text = ""
-            history_indicator.text = ""
     
     # Initial update
     update_stats()
