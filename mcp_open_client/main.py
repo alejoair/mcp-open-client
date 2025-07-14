@@ -152,7 +152,7 @@ def create_new_conversation_and_refresh():
     refresh_conversations_list()
     # Also refresh chat UI if callback is set
     conversation_manager.refresh_chat_ui()
-    ui.notify('New conversation created', color='positive')
+    ui.notify('New conversation created', color='positive', position='top')
 
 def refresh_conversations_list():
     """Refresh the conversations list in the sidebar"""
@@ -215,7 +215,7 @@ def load_conversation_and_refresh(conversation_id: str):
     global current_update_content_function
     if current_update_content_function:
         current_update_content_function('chat')
-    ui.notify(f'Loaded conversation', color='info')
+    ui.notify(f'Loaded conversation', color='info', position='top')
 
 def delete_conversation_with_confirm(conversation_id: str):
     """Delete a conversation with confirmation"""
@@ -224,7 +224,7 @@ def delete_conversation_with_confirm(conversation_id: str):
         refresh_conversations_list()
         # Also refresh chat UI if callback is set
         conversation_manager.refresh_chat_ui()
-        ui.notify('Conversation deleted', color='warning')
+        ui.notify('Conversation deleted', color='warning', position='top')
         dialog.close()
     
     def cancel_delete():
@@ -288,7 +288,7 @@ def setup_ui():
                 
                 # Only show notification if status has changed
                 if status != last_status['message'] or color != last_status['color']:
-                    ui.notify(status, color=color)
+                    ui.notify(status, color=color, position='top')
                     last_status['message'] = status
                     last_status['color'] = color
         
@@ -302,7 +302,7 @@ def setup_ui():
         def is_active(section):
             return 'active' if section == active_section else ''
         
-        content_container = ui.row().classes('main-content w-full')
+        content_container = ui.row().classes('main-content w-full').style('padding: 0; margin: 0;')
         
         def update_content(section):
             nonlocal active_section
@@ -337,7 +337,7 @@ def setup_ui():
                 ui.space()
                 
                 with ui.row().classes('header-actions items-center no-wrap'):
-                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!')).classes('header-btn text-white').props('flat dense').tooltip('User Account')
+                    ui.button(icon='account_circle', on_click=lambda: ui.notify('User settings coming soon!', position='top')).classes('header-btn text-white').props('flat dense').tooltip('User Account')
         
         with ui.left_drawer(top_corner=True, bottom_corner=True).classes('nav-drawer') as left_drawer:
             ui.label('Navigation Menu').classes('text-h6 nav-title q-mb-lg')
