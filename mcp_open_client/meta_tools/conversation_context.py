@@ -9,7 +9,6 @@ import logging
 from typing import Dict, Any, Optional, List
 from nicegui import ui, app
 from mcp_open_client.meta_tools.meta_tool import meta_tool
-from mcp_open_client.ui.chat_handlers import add_message
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +70,7 @@ def add_to_context(content: str, replace: bool = False) -> Dict[str, Any]:
         # Guardar el contexto como un mensaje de sistema en la conversación actual
         context_message = get_context_system_message()
         if context_message:
+            from mcp_open_client.ui.chat_handlers import add_message
             add_message('system', context_message['content'])
         
         # Notificar al usuario
