@@ -14,91 +14,88 @@ def get_api_client():
     return _api_client_instance
 
 def show_content(container):
-    print("DEBUG: Starting show_content function")
+    """Display configuration UI with consistent styling"""
     container.clear()
+    container.classes('q-pa-md')
+    
     with container:
-        print("DEBUG: Inside container context")
-        # Header section with modern styling
-        # Header section removed - going straight to content
-        print("DEBUG: Creating header section")
-        print("DEBUG: Header section created successfully")
-        print("DEBUG: About to create main configuration card")
-        # Main configuration card  
-        with ui.card().classes('w-full max-w-4xl q-ma-auto q-pa-lg'):
-            print("DEBUG: Inside main card context")
-            # Function to get current config (always fresh from storage)
-            def get_current_config():
-                try:
-                    result = app.storage.user.get('user-settings', {})
-                    print(f"DEBUG: get_current_config returned")
-                    return result
-                except Exception as e:
-                    print(f"DEBUG: Error in get_current_config: {str(e)}")
-                    return {}
+        ui.label('Configuración').classes('text-2xl font-bold mb-6')
+        
+        # Overview card
+        with ui.card().classes('w-full mb-6'):
+            ui.label('Configuración del Sistema').classes('text-lg font-semibold mb-3')
+            ui.label('Configura tu proveedor de IA, modelo preferido y comportamiento del sistema. Los cambios se guardan automáticamente y se aplican a futuras conversaciones.').classes('text-sm text-gray-600 mb-4')
+        # Function to get current config (always fresh from storage)
+        def get_current_config():
+            try:
+                result = app.storage.user.get('user-settings', {})
+                return result
+            except Exception as e:
+                return {}
 
-            print("DEBUG: About to load current configuration")
-            # Load current configuration
-            config = get_current_config()
-            print(f"DEBUG: Configuration loaded")
+        # Load current configuration
+        config = get_current_config()
 
-            # API Configuration Section
-            print("DEBUG: Creating API Configuration section")
-            with ui.column().classes('w-full q-mb-lg'):
-                print("DEBUG: Inside API Configuration column")
-                ui.label('🔑 API Configuration').classes('text-h6 text-weight-semibold q-mb-md')
-                print("DEBUG: API Configuration label created")
+        # API Configuration card
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('key').classes('mr-2 text-primary')
+                    ui.label('Configuración de API').classes('text-lg font-semibold')
+            
+            with ui.column().classes('w-full gap-4'):
+                # API Key
+                ui.label('Clave API').classes('text-sm text-gray-600')
+                # Safe handling of API key value
+                api_key_value = config.get('api_key', '')
+                # Truncate very long API keys for display
+                if len(api_key_value) > 100:
+                    api_key_value = api_key_value[:100]
                 
-                # API Key input with password toggle
-                print("DEBUG: About to create API Key row")
-                with ui.row().classes('w-full q-col-gutter-md'):
-                    print("DEBUG: Inside API Key row")
-                    # Safe handling of API key value
-                    api_key_value = config.get('api_key', '')
-                    print(f"DEBUG: API key length: {len(api_key_value)}")
-                    # Truncate very long API keys for display
-                    if len(api_key_value) > 100:
-                        api_key_value = api_key_value[:100]
-                        print("DEBUG: API key truncated for display")
-                    print("DEBUG: About to create API key input")
-                    api_key_input = ui.input(
-                        label='API Key', 
-                        value=api_key_value,
-                        password=True,
-                        password_toggle_button=True
-                    ).classes('col-12 col-sm-6')
-                    print("DEBUG: API key input created successfully")
-
-                print("DEBUG: About to create Base URL input")
-                # Base URL input
+                api_key_input = ui.input(
+                    placeholder='Ingresa tu clave API',
+                    value=api_key_value,
+                    password=True,
+                    password_toggle_button=True
+                ).classes('w-full')
+                
+                # Base URL
+                ui.label('URL Base').classes('text-sm text-gray-600')
                 base_url_input = ui.input(
-                    label='Base URL', 
+                    placeholder='http://localhost:8080 o https://api.openai.com/v1',
                     value=config.get('base_url', 'http://192.168.58.101:8123')
-                ).classes('w-full q-mt-md')
+                ).classes('w-full')
                 
-                # Add info about refreshing models
-                with ui.row().classes('w-full q-mt-sm items-center'):
-                    ui.icon('lightbulb').classes('q-mr-sm text-amber-6')
-                    ui.label('Click "Refresh Models" after changing API settings to load available models').classes('text-caption text-grey-7')
+                # Info tip
+                with ui.row().classes('w-full items-center'):
+                    ui.icon('lightbulb').classes('mr-2 text-amber-600')
+                    ui.label('Haz clic en "Cargar Modelos" después de cambiar la configuración para obtener modelos disponibles').classes('text-sm text-gray-600')
 
-            # System Prompt Configuration Section
-            with ui.column().classes('w-full q-mb-lg'):
-                ui.label('🤖 System Prompt Configuration').classes('text-h6 q-mb-md')
-                
-                # System prompt textarea
-                system_prompt_input = ui.textarea(
-                    label='System Prompt',
-                    value=config.get('system_prompt', 'You are a helpful assistant.'),
-                    placeholder='Enter your system prompt here...',
-                ).classes('w-full').style('min-height: 120px')
-                
-                # Add info about system prompt
-                with ui.row().classes('w-full q-mt-sm items-center'):
-                    ui.icon('info').classes('q-mr-sm text-blue-6')
-                    ui.label('The system prompt defines the AI assistant\'s behavior and personality. It will be sent as the first message in every conversation.').classes('text-caption text-grey-7')
+        # System Prompt card
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('psychology').classes('mr-2 text-secondary')
+                    ui.label('Prompt del Sistema').classes('text-lg font-semibold')
+            
+            ui.label('Define cómo debe comportarse el asistente').classes('text-sm text-gray-600 mb-2')
+            
+            system_prompt_input = ui.textarea(
+                value=config.get('system_prompt', 'You are a helpful assistant.'),
+                placeholder='Describe cómo quieres que se comporte el asistente...'
+            ).classes('w-full').props('rows=8')
+            
+            # Info tip
+            with ui.row().classes('w-full items-center mt-2'):
+                ui.icon('info').classes('mr-2 text-blue-600')
+                ui.label('El prompt del sistema define el comportamiento y personalidad del asistente. Se envía como primer mensaje en cada conversación.').classes('text-sm text-gray-600')
 
-            # Model Selection Section
-            with ui.column().classes('w-full q-mb-lg'):
-                ui.label('🤖 Model Selection').classes('text-h6 q-mb-md')
+        # Model Selection card
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('smart_toy').classes('mr-2 text-accent')
+                    ui.label('Selección de Modelo').classes('text-lg font-semibold')
                 
                 # Model selection - Dynamic loading
                 model_select_container = ui.column().classes('w-full')
@@ -163,7 +160,6 @@ def show_content(container):
                                 ui.notify('Empty response from API, using default models', color='warning', position='top')
                                 
                         except asyncio.TimeoutError:
-                            print("Timeout loading models from API")
                             model_options = default_models
                             ui.notify('API request timed out (10s), using default models', color='warning', position='top')
                         except Exception as e:
@@ -286,8 +282,6 @@ def show_content(container):
                     initial_configs = load_initial_config_from_files()
                     initial_config = initial_configs.get('user-settings', {})
                     
-                    print(f"Reset to factory - Initial config loaded: {initial_config}")
-                    
                     # Update input fields
                     api_key_input.value = initial_config.get('api_key', '')
                     base_url_input.value = initial_config.get('base_url', 'http://192.168.58.101:8123')
@@ -325,8 +319,15 @@ def show_content(container):
                             ui.button('🔄 Confirm Reset', on_click=lambda: [reset_to_factory(), dialog.close()]).props('color=negative')
                 dialog.open()
 
-            # Action buttons section
-            with ui.column().classes('w-full q-mt-xl'):
-                with ui.row().classes('w-full q-gutter-md justify-center flex-wrap'):
-                    ui.button('💾 Save Configuration', on_click=save_config).props('color=primary size=lg').classes('col-12 col-sm-auto')
-                    ui.button('🔄 Reset to Factory Settings', on_click=confirm_reset).props('color=secondary size=lg outline').classes('col-12 col-sm-auto')
+        # Actions card
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('save').classes('mr-2 text-positive')
+                    ui.label('Guardar Configuración').classes('text-lg font-semibold')
+            
+            ui.label('Los cambios se aplicarán inmediatamente a nuevas conversaciones').classes('text-sm text-gray-600 mb-4')
+            
+            with ui.row().classes('gap-4'):
+                ui.button('Guardar Configuración', icon='save', on_click=save_config).props('color=primary')
+                ui.button('Restablecer por Defecto', icon='refresh', on_click=confirm_reset).props('color=warning outline')
