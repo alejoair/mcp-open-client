@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
 from .history_manager import history_manager
+from mcp_open_client.meta_tools.conversation_context import inject_context_to_messages, get_context_system_message
 import asyncio
 import json
 
@@ -317,8 +318,15 @@ async def send_message_to_mcp(message: str, server_name: str, chat_container, me
         resources = await mcp_client_manager.list_resources()
         
         # Prepare the context for the LLM
+        # Get all messages from the current conversation
+        all_messages = get_messages()
+        
+        # Inject context into messages if available
+        messages_with_context = inject_context_to_messages(all_messages)
+        
         context = {
             "message": message,
+            "messages": messages_with_context,
             "tools": tools,
             "resources": resources
         }
