@@ -51,7 +51,7 @@ def create_history_settings_ui(container):
                     value=settings.get('max_tokens_per_conversation', 50000),
                     min=10000,
                     max=200000,
-                    step=10000
+                    step=1000
                 ).classes('flex-1')
                 
                 ui.label(f'Actual: {settings.get("max_tokens_per_conversation", 50000):,} tokens').classes('text-sm text-gray-600')
@@ -132,10 +132,3 @@ def create_history_settings_ui(container):
                 ui.label('No hay conversación activa').classes('text-sm text-gray-600 text-center p-8')
                 ui.label('Inicia una conversación en el chat para ver las estadísticas').classes('text-sm text-gray-600 text-center')
 
-def create_conversation_details_ui(container):
-    """
-    Conversation details UI (deprecated - functionality moved to main UI)
-    """
-    # This function is kept for compatibility but the functionality
-    # has been integrated into the main create_history_settings_ui
-    pass

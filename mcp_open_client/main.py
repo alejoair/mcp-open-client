@@ -28,6 +28,9 @@ from mcp_open_client.ui.chat_handlers import (
 # Import config utilities
 from mcp_open_client.config_utils import load_initial_config_from_files
 
+# Import conversation context
+from mcp_open_client.meta_tools.conversation_context import register_conversation_hook
+
 
 def init_storage():
     """Initialize storage - load from files only on first run"""
@@ -103,6 +106,13 @@ async def init_mcp_client():
                 # Use app.storage to communicate with the UI
                 app.storage.user['mcp_status'] = f"Connected to {server_count} MCP servers"
                 app.storage.user['mcp_status_color'] = 'positive'
+                
+                # Registrar el hook de contexto de conversación
+                try:
+                    register_conversation_hook()
+                    print("Sistema de contexto de conversación activado")
+                except Exception as e:
+                    print(f"Error al registrar el hook de contexto: {str(e)}")
             else:
                 print("Failed to connect to any MCP servers")
                 print("MCP client status:", mcp_client_manager.get_server_status())
