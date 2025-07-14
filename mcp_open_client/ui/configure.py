@@ -155,21 +155,21 @@ def show_content(container):
                                 
                                 if not model_options:
                                     model_options = default_models
-                                    ui.notify('No models found in API response, using defaults', color='warning')
+                                    ui.notify('No models found in API response, using defaults', color='warning', position='top')
                                 else:
-                                    ui.notify(f'Loaded {len(model_options)} models from API', color='positive')
+                                    ui.notify(f'Loaded {len(model_options)} models from API', color='positive', position='top')
                             else:
                                 model_options = default_models
-                                ui.notify('Empty response from API, using default models', color='warning')
+                                ui.notify('Empty response from API, using default models', color='warning', position='top')
                                 
                         except asyncio.TimeoutError:
                             print("Timeout loading models from API")
                             model_options = default_models
-                            ui.notify('API request timed out (10s), using default models', color='warning')
+                            ui.notify('API request timed out (10s), using default models', color='warning', position='top')
                         except Exception as e:
                             print(f"Error loading models from API: {str(e)}")
                             model_options = default_models
-                            ui.notify('Failed to load models from API, using defaults', color='warning')
+                            ui.notify('Failed to load models from API, using defaults', color='warning', position='top')
                         finally:
                             # Restore original config (don't auto-save test settings)
                             app.storage.user['user-settings'] = original_config
@@ -179,7 +179,7 @@ def show_content(container):
                         # Always ensure we have model_options (even if API failed)
                         if 'model_options' not in locals():
                             model_options = default_models
-                            ui.notify('Using default models due to API error', color='warning')
+                            ui.notify('Using default models due to API error', color='warning', position='top')
                         
                         # Clear loading state
                         loading_container.clear()
@@ -252,7 +252,7 @@ def show_content(container):
             def save_config():
                 # Check if model_select is available (should always be available now)
                 if model_select is None:
-                    ui.notify('Error: Model selector not initialized. Try refreshing models first.', color='warning')
+                    ui.notify('Error: Model selector not initialized. Try refreshing models first.', color='warning', position='top')
                     return
                 
                 # Create new user config (independent from MCP config)
@@ -270,16 +270,16 @@ def show_content(container):
                 try:
                     api_client = get_api_client()
                     api_client.update_settings()
-                    ui.notify('Configuration saved and API client updated successfully!', color='positive')
+                    ui.notify('Configuration saved and API client updated successfully!', color='positive', position='top')
                 except Exception as e:
                     print(f"Error updating API client: {str(e)}")
-                    ui.notify('Configuration saved, but API client update failed', color='warning')
+                    ui.notify('Configuration saved, but API client update failed', color='warning', position='top')
             
             # Add a button to reset configuration to defaults
             def reset_to_factory():
                 # Check if model_select is available (should always be available now)
                 if model_select is None:
-                    ui.notify('Error: Model selector not initialized. Try refreshing models first.', color='warning')
+                    ui.notify('Error: Model selector not initialized. Try refreshing models first.', color='warning', position='top')
                     return
                     
                 try:
@@ -307,11 +307,11 @@ def show_content(container):
                     api_client = get_api_client()
                     api_client.update_settings()
                     
-                    ui.notify('Configuration reset to factory settings and API client updated successfully!', color='positive')
+                    ui.notify('Configuration reset to factory settings and API client updated successfully!', color='positive', position='top')
                     
                 except Exception as e:
                     print(f"Error during factory reset: {str(e)}")
-                    ui.notify(f'Error resetting configuration: {str(e)}', color='negative')
+                    ui.notify(f'Error resetting configuration: {str(e)}', color='negative', position='top')
 
             def confirm_reset():
                 with ui.dialog() as dialog, ui.card().classes('q-pa-lg'):

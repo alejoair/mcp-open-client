@@ -42,9 +42,9 @@ def create_chat_interface(container):
                 with ui.tab_panels(tabs, value=chat_tab).classes('w-full flex-grow items-stretch'):
                     
                     # Chat Panel - Message container with scroll
-                    with ui.tab_panel(chat_tab).classes('items-stretch h-full'):
+                    with ui.tab_panel(chat_tab).classes('items-stretch h-full').style('padding: 0; margin: 0;'):
 
-                        with ui.scroll_area().classes('chat-messages h-full w-full') as scroll_area:
+                        with ui.scroll_area().classes('chat-messages h-full w-full').style('background: transparent !important;') as scroll_area:
                             message_container = ui.column().classes('w-full')
                             
                             # Load messages from current conversation
@@ -178,7 +178,7 @@ Feel free to ask me anything or start a conversation!'''
 
 def create_stats_bar():
     """Create a statistics bar showing current conversation info"""
-    with ui.row().classes('w-full bg-gray-800/20 border-b border-gray-700 p-2 items-center justify-between text-xs') as stats_container:
+    with ui.row().classes('w-full border-b border-gray-700 py-2 items-center justify-between text-xs') as stats_container:
         # Left side - Conversation stats
         with ui.row().classes('items-center gap-4'):
             conv_messages_label = ui.label('0 messages').classes('text-gray-400')

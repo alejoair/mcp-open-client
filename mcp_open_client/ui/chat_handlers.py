@@ -152,14 +152,14 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('user-message message-bubble mb-2 max-w-4xl border-l-4 border-red-400') as user_card:
+            with ui.card().classes('user-message message-bubble mb-2 max-w-4xl').style('border-left: 4px solid #1e40af; background: #1e293b; padding: 8px;') as user_card:
                 parse_and_render_message(content, user_card)
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl border-l-4 border-red-300') as bot_card:
+            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl border-l-4 border-red-300').style('background: #374151; padding: 8px;') as bot_card:
                 if content:
                     parse_and_render_message(content, bot_card)
                 
@@ -169,7 +169,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                 
                 # Show tool calls if present
                 if tool_calls:
-                    ui.separator().classes('my-2')
+                    ui.separator().style('margin: 0;')
                     for i, tool_call in enumerate(tool_calls):
                         function_info = tool_call.get('function', {})
                         tool_name = function_info.get('name', 'unknown')
@@ -181,7 +181,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                         
                         with ui.expansion(f"{tool_name}",
                                         icon=None,
-                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 mb-2 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"').style('max-width: 100%; box-sizing: border-box;'):
+                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"').style('max-width: 100%; box-sizing: border-box; margin: 0;'):
                             # Tool Call Section
                             ui.label('Arguments:').classes('font-semibold text-blue-300')
                             try:
@@ -193,7 +193,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                             
                             # Tool Response Section (if available)
                             if tool_response:
-                                ui.separator().classes('my-3')
+                                ui.separator().style('margin: 0;')
                                 ui.label('Response:').classes('font-semibold text-emerald-300')
                                 # Use HTML with strict width control to prevent horizontal expansion
                                 import html
@@ -400,141 +400,66 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             # Get full conversation history for context
             conversation_messages = get_messages()
             
-            # Enhanced validation and cleaning for tool call sequences
-            def validate_and_clean_messages(messages):
-                """
-                Comprehensive validation and cleaning of message sequences.
-                Handles orphaned tool calls, invalid sequences, and ensures API compatibility.
-                """
+            # Simple validation: remove orphaned tool calls
+            def clean_orphaned_tools(messages):
+                """Remove orphaned tool calls - keep only complete sequences"""
                 if not messages:
                     return []
                 
-                cleaned_messages = []
-                i = 0
-                
-                while i < len(messages):
-                    msg = messages[i]
-                    
-                    # Skip messages with None content to prevent API errors
-                    if msg.get("content") is None:
-                        print(f"Warning: Skipping message with None content at index {i}")
-                        i += 1
+                # Convert to API format first
+                api_messages = []
+                for msg in messages:
+                    if not msg.get("content") and msg.get("role") != "assistant":
                         continue
                     
-                    # If this is an assistant message with tool_calls
-                    if (msg["role"] == "assistant" and
-                        "tool_calls" in msg and
-                        msg["tool_calls"]):
-                        
-                        # Validate tool_calls structure
-                        valid_tool_calls = []
+                    api_msg = {
+                        "role": msg["role"],
+                        "content": msg.get("content") or ""
+                    }
+                    
+                    if msg["role"] == "assistant" and msg.get("tool_calls"):
+                        api_msg["tool_calls"] = msg["tool_calls"]
+                    elif msg["role"] == "tool" and msg.get("tool_call_id"):
+                        api_msg["tool_call_id"] = msg["tool_call_id"]
+                    
+                    api_messages.append(api_msg)
+                
+                # Find tool calls that have responses
+                tool_call_ids = set()
+                tool_response_ids = set()
+                
+                for msg in api_messages:
+                    if msg["role"] == "assistant" and "tool_calls" in msg:
                         for tc in msg["tool_calls"]:
-                            if (isinstance(tc, dict) and
-                                "id" in tc and
-                                "function" in tc and
-                                isinstance(tc["function"], dict) and
-                                "name" in tc["function"]):
-                                valid_tool_calls.append(tc)
-                            else:
-                                print(f"Warning: Invalid tool call structure: {tc}")
+                            tool_call_ids.add(tc["id"])
+                    elif msg["role"] == "tool" and "tool_call_id" in msg:
+                        tool_response_ids.add(msg["tool_call_id"])
+                
+                # Remove assistant messages with orphaned tool calls (except the last one)
+                cleaned = []
+                for i, msg in enumerate(api_messages):
+                    if msg["role"] == "assistant" and "tool_calls" in msg:
+                        # Check if all tool calls have responses
+                        has_orphaned = any(tc["id"] not in tool_response_ids for tc in msg["tool_calls"])
+                        is_last_message = i == len(api_messages) - 1
                         
-                        if not valid_tool_calls:
-                            # No valid tool calls, treat as regular assistant message
-                            msg_copy = msg.copy()
-                            msg_copy.pop("tool_calls", None)
-                            cleaned_messages.append(msg_copy)
-                            i += 1
-                            continue
-                        
-                        # Check if the next messages contain all corresponding tool results
-                        tool_call_ids = {tc["id"] for tc in valid_tool_calls}
-                        found_tool_results = set()
-                        tool_result_messages = []
-                        
-                        # Look ahead for tool results
-                        j = i + 1
-                        while j < len(messages) and messages[j]["role"] == "tool":
-                            tool_msg = messages[j]
-                            if ("tool_call_id" in tool_msg and
-                                tool_msg["tool_call_id"] in tool_call_ids and
-                                tool_msg.get("content") is not None):
-                                found_tool_results.add(tool_msg["tool_call_id"])
-                                tool_result_messages.append(tool_msg)
-                            else:
-                                print(f"Warning: Invalid or orphaned tool result: {tool_msg}")
-                            j += 1
-                        
-                        # Only include complete tool call sequences
-                        if tool_call_ids == found_tool_results and len(found_tool_results) > 0:
-                            # Add the assistant message with valid tool calls
-                            msg_copy = msg.copy()
-                            msg_copy["tool_calls"] = valid_tool_calls
-                            cleaned_messages.append(msg_copy)
-                            # Add all valid tool result messages
-                            cleaned_messages.extend(tool_result_messages)
-                            i = j  # Skip to after the tool results
+                        if has_orphaned and not is_last_message:
+                            # Remove tool_calls from orphaned assistant message
+                            cleaned_msg = {"role": msg["role"], "content": msg["content"] or "[Tool call removed]"}
+                            cleaned.append(cleaned_msg)
                         else:
-                            # Incomplete sequence - convert to regular assistant message
-                            print(f"Warning: Incomplete tool call sequence. Expected: {tool_call_ids}, Found: {found_tool_results}")
-                            msg_copy = msg.copy()
-                            msg_copy.pop("tool_calls", None)
-                            # Add explanation about tool calls if content is empty
-                            if not msg_copy.get("content"):
-                                msg_copy["content"] = f"[Tool calls were attempted but incomplete]"
-                            cleaned_messages.append(msg_copy)
-                            i = j  # Skip to after any partial tool results
-                    
+                            cleaned.append(msg)
                     elif msg["role"] == "tool":
-                        # Orphaned tool result - skip it
-                        print(f"Warning: Skipping orphaned tool result: {msg.get('tool_call_id', 'unknown')}")
-                        i += 1
-                    
+                        # Only keep tool responses that have corresponding calls
+                        if msg["tool_call_id"] in tool_call_ids:
+                            cleaned.append(msg)
                     else:
-                        # Regular message (user, assistant without tool_calls)
-                        # Ensure content is not None
-                        if msg.get("content") is None:
-                            msg_copy = msg.copy()
-                            msg_copy["content"] = ""
-                        else:
-                            msg_copy = msg
-                        cleaned_messages.append(msg_copy)
-                        i += 1
+                        cleaned.append(msg)
                 
-                return cleaned_messages
+                return cleaned
             
-            # Clean the conversation messages with enhanced validation
-            conversation_messages = validate_and_clean_messages(conversation_messages)
-            
-            # Convert to API format with additional safety checks
-            api_messages = []
-            for msg in conversation_messages:
-                # Ensure required fields exist
-                if "role" not in msg or "content" not in msg:
-                    print(f"Warning: Skipping malformed message: {msg}")
-                    continue
-                
-                api_msg = {
-                    "role": msg["role"],
-                    "content": msg["content"] or ""  # Ensure content is never None
-                }
-                
-                # Include tool_calls for assistant messages (with validation)
-                if (msg["role"] == "assistant" and
-                    "tool_calls" in msg and
-                    isinstance(msg["tool_calls"], list) and
-                    len(msg["tool_calls"]) > 0):
-                    api_msg["tool_calls"] = msg["tool_calls"]
-                
-                # Include tool_call_id for tool messages (with validation)
-                if (msg["role"] == "tool" and
-                    "tool_call_id" in msg and
-                    msg["tool_call_id"]):
-                    api_msg["tool_call_id"] = msg["tool_call_id"]
-                
-                api_messages.append(api_msg)
-            
-            # Final validation: ensure no orphaned tool results or incomplete sequences
-            api_messages = _final_tool_sequence_validation(api_messages, force_cleanup=False)
+            # Clean conversation messages
+            api_messages = clean_orphaned_tools(conversation_messages)
             
             # Get available MCP tools for tool calling
             from .handle_tool_call import get_available_tools, is_tool_call_response, extract_tool_calls, handle_tool_call
@@ -725,10 +650,10 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                     
                     print(f"DEBUG: Built {len(api_messages)} api_messages before validation")
                     
-                    # Apply final validation to ensure no orphaned tool results (normal execution)
-                    api_messages = _final_tool_sequence_validation(api_messages, force_cleanup=False)
+                    # Clean orphaned tools before API call
+                    api_messages = clean_orphaned_tools(get_messages())
                     
-                    print(f"DEBUG: After validation: {len(api_messages)} api_messages")
+                    print(f"DEBUG: After cleaning: {len(api_messages)} api_messages")
                     
                     # Check again before making API call
                     if stop_generation:
@@ -746,8 +671,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                     
                     # Make API call with stop check
                     try:
-                        # Validate message sequence but preserve pending tool calls during normal execution
-                        api_messages = _final_tool_sequence_validation(api_messages, force_cleanup=False)
+                        # Clean orphaned tools before API call
+                        api_messages = clean_orphaned_tools(get_messages())
                         
                         if available_tools:
                             response = await api_client.chat_completion(api_messages, tools=available_tools)
@@ -762,11 +687,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         # Check if stopped during API call
                         if stop_generation:
                             print("Generation stopped during API call")
-                            # Clean up any orphaned tool calls before breaking (STOP PRESSED)
-                            cleaned_messages = _final_tool_sequence_validation(api_messages, force_cleanup=True)
-                            if len(cleaned_messages) != len(api_messages):
-                                print(f"Cleaned up orphaned tool calls after API call: {len(api_messages)} -> {len(cleaned_messages)} messages")
-                                _rebuild_conversation_from_cleaned_messages(cleaned_messages)
                             break
                             
                         # Process response normally
@@ -879,45 +799,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             render_messages(message_container)
             
         finally:
-            # Clean up any orphaned tool calls before finishing
-            try:
-                conversation_messages = get_messages()
-                api_messages = []
-                for msg in conversation_messages:
-                    api_msg = {
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    }
-                    
-                    # Include tool_calls for assistant messages
-                    if msg["role"] == "assistant" and "tool_calls" in msg:
-                        api_msg["tool_calls"] = msg["tool_calls"]
-                    
-                    # Include tool_call_id for tool messages
-                    if msg["role"] == "tool" and "tool_call_id" in msg:
-                        api_msg["tool_call_id"] = msg["tool_call_id"]
-                    
-                    api_messages.append(api_msg)
-                
-                # Apply final validation to clean up any orphaned tool calls (FINALLY BLOCK - conditional)
-                # Only force cleanup if stop was pressed or there was an error
-                force_cleanup = stop_generation or 'error' in locals()
-                cleaned_messages = _final_tool_sequence_validation(api_messages, force_cleanup=force_cleanup)
-                
-                # If orphaned tool calls were found, update the conversation
-                if len(cleaned_messages) != len(api_messages):
-                    print(f"Final cleanup: {len(api_messages)} -> {len(cleaned_messages)} messages")
-                    _rebuild_conversation_from_cleaned_messages(cleaned_messages)
-                    
-                    # Re-render messages to show cleaned conversation
-                    message_container.clear()
-                    from .chat_interface import render_messages
-                    render_messages(message_container)
-                    
-            except Exception as cleanup_error:
-                print(f"Error during final cleanup: {cleanup_error}")
-            
-            # Always reset generation state when done
+            # Reset generation state
             generation_active = False
             stop_generation = False
             
@@ -933,140 +815,3 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 stats_update_callback()
 
 
-def _final_tool_sequence_validation(api_messages, force_cleanup=False):
-    """
-    Final validation to ensure no orphaned tool calls or results.
-    Removes orphaned tool messages and ensures complete tool call sequences.
-    
-    Args:
-        api_messages: List of API-formatted messages
-        force_cleanup: If True, removes assistant messages with unresolved tool calls
-        
-    Returns:
-        List of validated messages ensuring complete tool call sequences
-    """
-    if not api_messages:
-        return []
-    
-    validated_messages = []
-    pending_tool_calls = set()  # Set of tool_call_ids that need responses
-    
-    for msg in api_messages:
-        role = msg.get('role')
-        
-        if role == 'assistant' and 'tool_calls' in msg:
-            # Track tool calls that need responses
-            for tc in msg.get('tool_calls', []):
-                if tc.get('id'):
-                    pending_tool_calls.add(tc['id'])
-            validated_messages.append(msg)
-            
-        elif role == 'tool':
-            # Check if this tool result has a corresponding tool call
-            tool_call_id = msg.get('tool_call_id')
-            if tool_call_id and tool_call_id in pending_tool_calls:
-                # Valid tool result
-                validated_messages.append(msg)
-                pending_tool_calls.remove(tool_call_id)
-            else:
-                # Orphaned tool result - skip it
-                print(f"Final validation: Removing orphaned tool result with ID: {tool_call_id}")
-                
-        else:
-            # Regular user/system/assistant message
-            validated_messages.append(msg)
-    
-    # CRITICAL: Handle unresolved tool calls to prevent API errors
-    if pending_tool_calls:
-        print(f"Final validation: Found {len(pending_tool_calls)} unresolved tool calls: {pending_tool_calls}")
-        
-        if force_cleanup:
-            print("Removing assistant messages with unresolved tool calls to prevent API errors")
-            
-            # Remove assistant messages that have unresolved tool calls
-            final_validated_messages = []
-            for msg in validated_messages:
-                if msg.get('role') == 'assistant' and 'tool_calls' in msg:
-                    # Check if this assistant message has any unresolved tool calls
-                    has_unresolved = False
-                    for tc in msg.get('tool_calls', []):
-                        if tc.get('id') in pending_tool_calls:
-                            has_unresolved = True
-                            break
-                    
-                    if has_unresolved:
-                        print(f"Removing assistant message with unresolved tool calls: {[tc.get('id') for tc in msg.get('tool_calls', [])]}")
-                        continue
-                
-                final_validated_messages.append(msg)
-            
-            validated_messages = final_validated_messages
-            print(f"Final validation: {len(api_messages)} -> {len(validated_messages)} messages")
-        else:
-            # In normal execution, we cannot send incomplete tool call sequences to the API
-            # This will cause BadRequestError, so we must remove the incomplete sequences
-            print("WARNING: Incomplete tool call sequences detected. Removing to prevent API errors.")
-            
-            final_validated_messages = []
-            for msg in validated_messages:
-                if msg.get('role') == 'assistant' and 'tool_calls' in msg:
-                    # Check if this assistant message has any unresolved tool calls
-                    has_unresolved = False
-                    for tc in msg.get('tool_calls', []):
-                        if tc.get('id') in pending_tool_calls:
-                            has_unresolved = True
-                            break
-                    
-                    if has_unresolved:
-                        print(f"Removing assistant message with unresolved tool calls: {[tc.get('id') for tc in msg.get('tool_calls', [])]}")
-                        continue
-                
-                final_validated_messages.append(msg)
-            
-            validated_messages = final_validated_messages
-            print(f"Final validation: {len(api_messages)} -> {len(validated_messages)} messages")
-    
-    return validated_messages
-
-
-def _rebuild_conversation_from_cleaned_messages(cleaned_api_messages):
-    """
-    Rebuild the conversation storage from cleaned API messages.
-    This removes orphaned tool calls from the stored conversation.
-    
-    Args:
-        cleaned_api_messages: List of validated API messages without orphaned tool calls
-    """
-    global current_conversation_id
-    
-    if not current_conversation_id:
-        return
-    
-    conversations = get_conversation_storage()
-    if current_conversation_id not in conversations:
-        return
-    
-    # Convert API messages back to conversation format
-    new_messages = []
-    for api_msg in cleaned_api_messages:
-        conv_msg = {
-            "role": api_msg["role"],
-            "content": api_msg["content"],
-            "timestamp": str(uuid.uuid1().time)
-        }
-        
-        # Include tool_calls for assistant messages
-        if api_msg["role"] == "assistant" and "tool_calls" in api_msg:
-            conv_msg["tool_calls"] = api_msg["tool_calls"]
-        
-        # Include tool_call_id for tool messages
-        if api_msg["role"] == "tool" and "tool_call_id" in api_msg:
-            conv_msg["tool_call_id"] = api_msg["tool_call_id"]
-        
-        new_messages.append(conv_msg)
-    
-    # Update the conversation with cleaned messages
-    conversations[current_conversation_id]["messages"] = new_messages
-    conversations[current_conversation_id]["updated_at"] = str(uuid.uuid1().time)
-    
-    print(f"Rebuilt conversation with {len(new_messages)} cleaned messages")
