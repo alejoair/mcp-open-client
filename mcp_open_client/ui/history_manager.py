@@ -1,10 +1,23 @@
 """
-Simple Rolling Window History Manager
+History Manager with accurate token counting using tiktoken
 """
+
+import tiktoken
+import json
 
 class HistoryManager:
     def __init__(self, max_messages=50):
         self._default_max_messages = max_messages
+        self._default_settings = {
+            'max_messages': max_messages,
+            'max_tokens_per_message': 10000,
+            'max_tokens_per_conversation': 50000,  # Independent value, not derived
+            'auto_cleanup': True,
+            'preserve_tool_calls': True,
+            'compression_enabled': False,
+            'truncate_mode': 'simple',
+            'token_counting_method': 'tiktoken'  # Using tiktoken for accurate counting
+        }
     
     @property
     def max_messages(self):
@@ -12,25 +25,38 @@ class HistoryManager:
         try:
             from nicegui import app
             settings = app.storage.user.get('history-settings', {})
-            return settings.get('max_messages', self._default_max_messages)
+            return settings.get('max_messages', self._default_settings['max_messages'])
         except:
-            return self._default_max_messages
+            return self._default_settings['max_messages']
     
     
-    def update_max_messages(self, max_messages):
-        """Update max messages setting and save to storage"""
+    def update_setting(self, setting_name, value):
+        """Update a specific setting and save to storage"""
+        if setting_name not in self._default_settings:
+            print(f"WARNING: Unknown setting '{setting_name}'")
+            return False
+            
         try:
             from nicegui import app
             if 'history-settings' not in app.storage.user:
                 app.storage.user['history-settings'] = {}
-            app.storage.user['history-settings']['max_messages'] = max_messages
-            print(f"DEBUG: Updated max_messages to: {max_messages}")
+            app.storage.user['history-settings'][setting_name] = value
+            print(f"DEBUG: Updated {setting_name} to: {value}")
+            return True
         except Exception as e:
-            print(f"DEBUG: Failed to save max_messages: {e}")
+            print(f"DEBUG: Failed to save {setting_name}: {e}")
+            return False
+    
+    def update_max_messages(self, max_messages):
+        """Update max messages setting (legacy method)"""
+        return self.update_setting('max_messages', max_messages)
     
     def cleanup_conversation_if_needed(self, conversation_id: str) -> bool:
         """
-        Simple rolling window: keep only the last max_messages messages.
+        Cleanup conversation if it exceeds limits:
+        1. If message count exceeds max_messages: keep only the last max_messages
+        2. If token count exceeds max_tokens_per_conversation: remove oldest messages until below limit
+        
         Tool call validation is handled by _final_tool_sequence_validation.
         """
         from .chat_handlers import get_conversation_storage
@@ -41,21 +67,43 @@ class HistoryManager:
         
         messages = conversations[conversation_id]['messages']
         original_count = len(messages)
+        settings = self.settings
+        max_tokens = settings.get('max_tokens_per_conversation', 50000)
         
-        if original_count <= self.max_messages:
+        # Check if we need to clean up based on message count
+        message_cleanup_needed = original_count > self.max_messages
+        
+        # Check if we need to clean up based on token count
+        conv_stats = self.get_conversation_size(conversation_id)
+        token_cleanup_needed = conv_stats['total_tokens'] > max_tokens
+        
+        if not message_cleanup_needed and not token_cleanup_needed:
             return False
         
-        # Simple rolling window: keep the last max_messages
-        messages_to_remove = original_count - self.max_messages
-        kept_messages = messages[messages_to_remove:]
+        # If we need to clean up based on message count
+        if message_cleanup_needed:
+            # Simple rolling window: keep the last max_messages
+            messages_to_remove = original_count - self.max_messages
+            kept_messages = messages[messages_to_remove:]
+            conversations[conversation_id]['messages'] = kept_messages
+            
+            print(f"Rolling window: removed {messages_to_remove} messages, kept {len(kept_messages)} (target: {self.max_messages})")
         
-        conversations[conversation_id]['messages'] = kept_messages
+        # If we need to clean up based on token count
+        elif token_cleanup_needed:
+            # Remove oldest messages until we're under the token limit
+            # Start by removing 25% of the messages
+            messages_to_remove = max(1, int(original_count * 0.25))
+            kept_messages = messages[messages_to_remove:]
+            conversations[conversation_id]['messages'] = kept_messages
+            
+            print(f"Token limit cleanup: removed {messages_to_remove} oldest messages to reduce token count")
+            print(f"Token count was {conv_stats['total_tokens']}, limit is {max_tokens}")
         
         # Save to storage
         from nicegui import app
         app.storage.user['conversations'] = conversations
         
-        print(f"Rolling window: removed {messages_to_remove} messages, kept {len(kept_messages)} (target: {self.max_messages})")
         print(f"Conversation cleanup performed for {conversation_id}")
         return True
     
@@ -65,27 +113,73 @@ class HistoryManager:
         return message
     
     def get_conversation_size(self, conversation_id: str):
-        """Get conversation size info with improved token estimation"""
+        """Get conversation size info with accurate token counting"""
         from .chat_handlers import get_conversation_storage
         conversations = get_conversation_storage()
         
         if conversation_id not in conversations:
-            return {'total_tokens': 0, 'total_chars': 0, 'message_count': 0}
+            return {'total_tokens': 0, 'message_count': 0}
         
         messages = conversations[conversation_id]['messages']
-        total_chars = sum(len(msg.get('content', '') or '') for msg in messages)
         
-        # Better token estimation based on content analysis
+        # Accurate token counting using tiktoken
         total_tokens = self._estimate_tokens_from_messages(messages)
         
         return {
             'total_tokens': total_tokens,
-            'total_chars': total_chars,
             'message_count': len(messages)
         }
     
     def _estimate_tokens_from_messages(self, messages):
-        """Estimate tokens from messages using improved heuristics"""
+        """Count tokens accurately from messages using tiktoken
+        
+        This uses OpenAI's tiktoken library to accurately count tokens
+        the same way they are counted by the actual models.
+        """
+        try:
+            # Get the cl100k_base encoder which is used by gpt-3.5-turbo and gpt-4
+            enc = tiktoken.get_encoding("cl100k_base")
+            
+            # Following the OpenAI API chat format guidelines
+            # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
+            
+            tokens_per_message = 3  # every message follows <im_start>{role/name}\n{content}<im_end>
+            tokens_per_name = 1     # if there's a name, the role is omitted
+            
+            total_tokens = 0
+            for msg in messages:
+                total_tokens += tokens_per_message
+                
+                # Count tokens for each component of the message
+                for key, value in msg.items():
+                    if key == "tool_calls" and isinstance(value, list):
+                        # Handle tool calls specially
+                        for tool_call in value:
+                            # Convert tool call to a string representation for tokenization
+                            if isinstance(tool_call, dict):
+                                # Serialize the tool call to JSON and count its tokens
+                                tool_call_str = json.dumps(tool_call)
+                                total_tokens += len(enc.encode(tool_call_str))
+                    elif key != "_truncated":  # Skip internal metadata
+                        if value is not None and value != "":
+                            total_tokens += len(enc.encode(str(value)))
+                            
+                            # If it's a name, we have the additional tokens_per_name
+                            if key == "name":
+                                total_tokens += tokens_per_name
+            
+            # Every reply is primed with <im_start>assistant
+            total_tokens += 3
+            
+            return total_tokens
+            
+        except Exception as e:
+            # Fallback to the heuristic method if tiktoken fails
+            print(f"Error using tiktoken: {e}. Falling back to heuristic method.")
+            return self._estimate_tokens_heuristic(messages)
+    
+    def _estimate_tokens_heuristic(self, messages):
+        """Fallback heuristic method for token estimation"""
         total_tokens = 0
         
         for msg in messages:
@@ -110,39 +204,44 @@ class HistoryManager:
                         total_tokens += 10  # Tool call overhead
                         function_name = tool_call.get('function', {}).get('name', '')
                         arguments = tool_call.get('function', {}).get('arguments', '')
-                        total_tokens += len(function_name) // 3  # Function name tokens
                         total_tokens += self._estimate_content_tokens(arguments)
                         
             elif role == 'tool':
                 total_tokens += 5  # Tool response overhead
         
         return total_tokens
-    
+        
     def _estimate_content_tokens(self, content):
         """Estimate tokens for content using improved heuristics"""
         if not content:
             return 0
-        
-        # Count different types of content
-        words = content.split()
-        chars = len(content)
-        
-        # Heuristic based on content analysis:
-        # - Code and technical content: ~2.5 chars per token
-        # - Natural language: ~4 chars per token
-        # - JSON/structured data: ~3 chars per token
-        
-        # Detect content type
-        if self._is_code_like(content):
-            return max(chars // 2.5, len(words) * 0.8)  # Code is more token-dense
-        elif self._is_json_like(content):
-            return max(chars // 3, len(words) * 0.9)  # JSON is structured
-        else:
-            return max(chars // 4, len(words) * 0.75)  # Natural language
+            
+        try:
+            # Try to use tiktoken for accurate counting
+            enc = tiktoken.get_encoding("cl100k_base")
+            return len(enc.encode(str(content)))
+        except Exception:
+            # Fallback to heuristic if tiktoken fails
+            # Count different types of content
+            words = str(content).split()
+            chars = len(str(content))
+            
+            # Heuristic based on content analysis:
+            # - Code and technical content: ~2.5 chars per token
+            # - Natural language: ~4 chars per token
+            # - JSON/structured data: ~3 chars per token
+            
+            # Detect content type
+            if self._is_code_like(str(content)):
+                return max(chars // 2.5, len(words) * 0.8)  # Code is more token-dense
+            elif self._is_json_like(str(content)):
+                return max(chars // 3, len(words) * 0.9)  # JSON is structured
+            else:
+                return max(chars // 4, len(words) * 0.75)  # Natural language
     
     def _is_code_like(self, content):
         """Detect if content looks like code"""
-        code_indicators = ['def ', 'function ', 'import ', 'from ', 'class ', '{', '}', '()', '=>', '===', '!==']
+        code_indicators = ['def ', 'function ', 'import ', 'from ', 'class ', '{', '}', '()', '=>', '===', '!==', 'return ', 'if ', 'for ', 'while ']
         return any(indicator in content for indicator in code_indicators)
     
     def _is_json_like(self, content):
@@ -153,19 +252,36 @@ class HistoryManager:
     
     @property
     def settings(self):
-        """Simple settings dict"""
-        return {
-            'auto_cleanup': True,
-            'max_tokens_per_message': 10000,
-            'max_tokens_per_conversation': self.max_messages * 1000,  # Rough estimate
-            'preserve_tool_calls': True,
-            'compression_enabled': False,
-            'truncate_mode': 'simple'
-        }
+        """Get settings with values from storage when available"""
+        try:
+            from nicegui import app
+            stored_settings = app.storage.user.get('history-settings', {})
+            
+            # Start with defaults, then update with stored values
+            settings = self._default_settings.copy()
+            for key, value in stored_settings.items():
+                if key in settings:
+                    settings[key] = value
+            
+            return settings
+        except Exception as e:
+            print(f"WARNING: Error loading settings: {e}")
+            return self._default_settings.copy()
     
     def get_settings(self):
         """Get settings dict"""
         return self.settings
+        
+    def reset_settings(self):
+        """Reset all settings to defaults"""
+        try:
+            from nicegui import app
+            app.storage.user['history-settings'] = self._default_settings.copy()
+            print("Settings reset to defaults")
+            return True
+        except Exception as e:
+            print(f"ERROR: Failed to reset settings: {e}")
+            return False
 
 # Global instance
 history_manager = HistoryManager(max_messages=50)

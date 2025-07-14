@@ -2,91 +2,63 @@ from nicegui import ui
 
 def show_content(container):
     """
-    Creates and renders a home page with a grid of cards in the provided container.
+    Creates and renders a clean, vertical home page in the provided container.
     
     Args:
         container: The container to render the home page in
     """
-    # Ensure the parent container has proper height and takes full space
     container.clear()
-    container.classes('h-full w-full flex flex-col')
+    container.classes('q-pa-md')
     
     with container:
-        ui.label('Home').classes('text-h4 text-primary mb-2')
+        ui.label('Home').classes('text-2xl font-bold mb-6')
         
-        # Main content container that fills all available space
-        with ui.card().classes('flex-grow w-full flex flex-col p-4'):
-            # Welcome message
-            with ui.card().classes('w-full p-4 text-center mb-4'):
-                ui.label('Welcome to MCP Open Client').classes('text-h5 font-bold mb-2')
-                ui.label('Your central hub for managing MCP servers and communications')
-                ui.separator().classes('my-2')
-                ui.label('Select a card below to explore features or use the navigation menu')
-            
-            # Grid of feature cards
-            with ui.grid(columns=3).classes('w-full gap-4'):
-                # Card 1
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-primary text-white'):
-                        ui.label('MCP Servers').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('Server Management').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('Explore', icon='dns', on_click=lambda: ui.navigate.to('/mcp_servers')).props('flat')
-                
-                # Card 2
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-secondary text-white'):
-                        ui.label('Configuration').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('System Settings').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('Configure', icon='settings', on_click=lambda: ui.navigate.to('/configure')).props('flat')
-                
-                # Card 3
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-accent text-white'):
-                        ui.label('Chat').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('Communication').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('Open Chat', icon='chat', on_click=lambda: ui.navigate.to('/chat')).props('flat')
-                
-                # Card 4
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-positive text-white'):
-                        ui.label('Documentation').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('User Guides').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('View Docs', icon='description', on_click=lambda: ui.open('https://docs.mcp-open-client.com')).props('flat')
-                
-                # Card 5
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-info text-white'):
-                        ui.label('Status').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('System Status').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('Check Status', icon='monitoring', on_click=lambda: ui.notify('Status check initiated', color='info')).props('flat')
-                
-                # Card 6
-                with ui.card().classes('w-full'):
-                    with ui.card_section().classes('bg-warning text-white'):
-                        ui.label('Help').classes('text-h6')
-                    with ui.card_section():
-                        ui.label('Support').classes('text-subtitle1 font-bold')
-                        ui.label('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.')
-                    with ui.card_section().classes('bg-gray-100'):
-                        with ui.row().classes('justify-end'):
-                            ui.button('Get Help', icon='help', on_click=lambda: ui.notify('Help system coming soon', color='warning')).props('flat')
+        # Welcome card
+        with ui.card().classes('w-full mb-6'):
+            ui.label('Bienvenido a MCP Open Client').classes('text-lg font-semibold mb-3')
+            ui.label('Tu hub central para conectar modelos de IA con herramientas externas a través del protocolo MCP. Gestiona servidores, configura APIs y chatea con capacidades expandidas.').classes('text-sm text-gray-600 mb-4')
+        
+        # MCP Servers
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('dns').classes('mr-2 text-primary')
+                    ui.label('MCP Servers').classes('text-lg font-semibold')
+                ui.button('Gestionar', icon='arrow_forward', on_click=lambda: ui.navigate.to('/mcp_servers')).props('flat color=primary')
+            ui.label('Conecta y gestiona servidores MCP para expandir las capacidades de tu IA con herramientas externas como editores de código, bases de datos y APIs web.').classes('text-sm text-gray-600')
+        
+        # Configuration
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('settings').classes('mr-2 text-secondary')
+                    ui.label('Configuración').classes('text-lg font-semibold')
+                ui.button('Configurar', icon='arrow_forward', on_click=lambda: ui.navigate.to('/configure')).props('flat color=secondary')
+            ui.label('Configura tus proveedores de IA (OpenAI, Claude, modelos locales), ajusta prompts del sistema y personaliza la experiencia según tus necesidades.').classes('text-sm text-gray-600')
+        
+        # Chat
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('chat').classes('mr-2 text-accent')
+                    ui.label('Chat').classes('text-lg font-semibold')
+                ui.button('Iniciar Chat', icon='arrow_forward', on_click=lambda: ui.navigate.to('/chat')).props('flat color=accent')
+            ui.label('Interfaz de chat con streaming en tiempo real, historial de conversaciones, resaltado de sintaxis e integración completa con herramientas MCP.').classes('text-sm text-gray-600')
+        
+        # History Settings
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('history').classes('mr-2 text-info')
+                    ui.label('Configuración de Historial').classes('text-lg font-semibold')
+                ui.button('Gestionar', icon='arrow_forward', on_click=lambda: ui.navigate.to('/history_settings')).props('flat color=info')
+            ui.label('Configura el límite de mensajes en conversaciones y gestiona la limpieza automática del historial para optimizar el rendimiento.').classes('text-sm text-gray-600')
+        
+        # Documentation & Help
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('help_outline').classes('mr-2 text-positive')
+                    ui.label('Documentación y Soporte').classes('text-lg font-semibold')
+                ui.button('Ver Docs', icon='open_in_new', on_click=lambda: ui.open('https://docs.mcp-open-client.com')).props('flat color=positive')
+            ui.label('Guías de usuario, documentación técnica del protocolo MCP y soporte de la comunidad para aprovechar al máximo la aplicación.').classes('text-sm text-gray-600')

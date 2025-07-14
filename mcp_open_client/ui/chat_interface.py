@@ -191,17 +191,26 @@ def create_stats_bar():
     def update_stats():
         conv_id = get_current_conversation_id()
         if conv_id:
-            # Get conversation stats
-            conv_stats = history_manager.get_conversation_size(conv_id)
+            # Get conversation stats - use our enhanced get_messages with stats
+            conversation_data = get_messages(include_stats=True)
+            conv_stats = conversation_data.get('stats', {})
             settings = history_manager.get_settings()
             
             # Update conversation stats - show tokens as primary metric
-            conv_messages_label.text = f"{conv_stats['message_count']} messages"
-            conv_tokens_label.text = f"{conv_stats['total_tokens']:,} tokens"
+            conv_messages_label.text = f"{conv_stats.get('message_count', 0)} messages"
+            
+            # Format token count with thousands separator
+            total_tokens = conv_stats.get('total_tokens', 0)
+            conv_tokens_label.text = f"{total_tokens:,} tokens"
             
             # Calculate and show percentage of limit based on tokens
-            token_percentage = (conv_stats['total_tokens'] / settings['max_tokens_per_conversation']) * 100
+            max_tokens = settings.get('max_tokens_per_conversation', 50000)
+            token_percentage = (total_tokens / max_tokens) * 100 if max_tokens > 0 else 0
             conv_limit_label.text = f"{token_percentage:.1f}% of limit"
+            
+            # Show token counting method as tooltip
+            token_method = settings.get('token_counting_method', 'heuristic')
+            conv_tokens_label.tooltip = f"Counted using {token_method}"
             
             # Color coding based on token percentage
             if token_percentage > 90:
@@ -219,6 +228,7 @@ def create_stats_bar():
         else:
             # No active conversation
             conv_messages_label.text = ""
+            conv_tokens_label.text = ""
             conv_limit_label.text = ""
     
     # Initial update
