@@ -163,4 +163,64 @@ strong {
     transform: translateX(-50%) !important;
     right: auto !important;
 }
+
+/* Responsive cards for home page */
+.card-responsive {
+    width: 100%;
+    min-width: 280px;
+    max-width: 400px;
+    flex: 1 1 300px;
+}
+
+@media (max-width: 768px) {
+    .card-responsive {
+        min-width: 100%;
+        max-width: 100%;
+        flex: 1 1 100%;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .card-responsive {
+        flex: 1 1 calc(50% - 1rem);
+        max-width: calc(50% - 1rem);
+    }
+}
+
+@media (min-width: 1025px) {
+    .card-responsive {
+        flex: 1 1 calc(33.333% - 1rem);
+        max-width: calc(33.333% - 1rem);
+}
+
+/* Responsive server cards for MCP servers page */
+.server-card-responsive {
+    width: 100%;
+    min-width: 320px;
+    max-width: 450px;
+    flex: 1 1 350px;
+}
+
+@media (max-width: 768px) {
+    .server-card-responsive {
+        min-width: 100%;
+        max-width: 100%;
+        flex: 1 1 100%;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+    .server-card-responsive {
+        flex: 1 1 calc(50% - 1rem);
+        max-width: calc(50% - 1rem);
+    }
+}
+
+@media (min-width: 1201px) {
+    .server-card-responsive {
+        flex: 1 1 calc(33.333% - 1rem);
+        max-width: calc(33.333% - 1rem);
+    }
+}
+}
 }

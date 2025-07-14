@@ -71,15 +71,30 @@ def set_stats_update_callback(callback: callable) -> None:
     global stats_update_callback
     stats_update_callback = callback
 
-def get_messages() -> List[Dict[str, Any]]:
-    """Get messages from current conversation"""
+def get_messages(include_stats: bool = False) -> List[Dict[str, Any]] | Dict[str, Any]:
+    """Get messages from current conversation
+    
+    Args:
+        include_stats: If True, include conversation stats in the result
+        
+    Returns:
+        List of messages or a dict with messages and stats
+    """
     if not current_conversation_id:
-        return []
+        return [] if not include_stats else {'messages': [], 'stats': {'total_tokens': 0, 'total_chars': 0, 'message_count': 0}}
     
     conversations = get_conversation_storage()
     if current_conversation_id in conversations:
-        return conversations[current_conversation_id]['messages'].copy()
-    return []
+        messages = conversations[current_conversation_id]['messages'].copy()
+        if include_stats:
+            # Get conversation stats
+            stats = history_manager.get_conversation_size(current_conversation_id)
+            return {
+                'messages': messages,
+                'stats': stats
+            }
+        return messages
+    return [] if not include_stats else {'messages': [], 'stats': {'total_tokens': 0, 'total_chars': 0, 'message_count': 0}}
 
 def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any]]] = None, tool_call_id: Optional[str] = None) -> None:
     """Add a message to the current conversation"""
@@ -115,9 +130,10 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
         
-        # Log conversation size
+        # Log conversation size with accurate token count from tiktoken
         conv_size = history_manager.get_conversation_size(current_conversation_id)
-        print(f"Conversation {current_conversation_id} size: {conv_size['total_tokens']} tokens ({conv_size['total_chars']} chars), {conv_size['message_count']} messages")
+        print(f"Conversation {current_conversation_id} size: {conv_size['total_tokens']} tokens, {conv_size['message_count']} messages")
+        print(f"Token counting method: {history_manager.settings.get('token_counting_method', 'heuristic')}")
         
         # Check if conversation or total history needs cleanup
         if history_manager.settings['auto_cleanup']:
@@ -129,6 +145,7 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
             # Note: Global history cleanup disabled - only per-conversation limits apply
         
         # Update stats in UI if callback is set
+        # This will use our enhanced token counting with tiktoken
         if stats_update_callback:
             stats_update_callback()
 

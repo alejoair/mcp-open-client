@@ -9,11 +9,10 @@ from mcp_open_client.mcp_client import mcp_client_manager
 def show_content(container):
     """Main function to display the MCP servers management UI"""
     container.clear()
+    container.classes('q-pa-md')
     
-    with container.classes('q-pa-md'):
-        ui.label('MCP SERVERS').classes('text-h4')
-        ui.label('Manage your MCP servers configuration.')
-        ui.separator()
+    with container:
+        ui.label('MCP Servers').classes('text-2xl font-bold mb-6')
         
         # Get the current MCP configuration from user storage
         mcp_config = app.storage.user.get('mcp-config', {})
@@ -22,10 +21,33 @@ def show_content(container):
         if not mcp_config:
             mcp_config = {"mcpServers": {}}
             app.storage.user['mcp-config'] = mcp_config
-            
-            # Configuration is automatically saved in user storage
         
         servers = mcp_config.get("mcpServers", {})
+        
+        # Actions card
+        with ui.card().classes('w-full mb-6'):
+            ui.label('Gestión de Servidores').classes('text-lg font-semibold mb-3')
+            ui.label('Conecta herramientas externas a través del protocolo MCP para expandir las capacidades de tu IA.').classes('text-sm text-gray-600 mb-4')
+            
+            with ui.row().classes('w-full gap-4'):
+                ui.button('Agregar Servidor', icon='add', on_click=lambda: show_add_dialog()).props('color=primary')
+                ui.button('Restaurar por Defecto', icon='refresh', on_click=lambda: reset_to_default()).props('color=warning')
+        
+        # Status overview card
+        with ui.card().classes('w-full mb-6'):
+            ui.label('Estado Actual').classes('text-lg font-semibold mb-3')
+            
+            if servers:
+                active_count = sum(1 for config in servers.values() if not config.get('disabled', False))
+                total_count = len(servers)
+                ui.label(f'Servidores configurados: {total_count}').classes('text-sm text-gray-600')
+                ui.label(f'Servidores activos: {active_count}').classes('text-sm text-gray-600')
+                
+                if active_count > 0:
+                    ui.linear_progress(active_count / total_count).classes('w-full mt-2')
+                    ui.label(f'{(active_count/total_count)*100:.0f}% de servidores activos').classes('text-sm text-gray-600')
+            else:
+                ui.label('No hay servidores configurados').classes('text-sm text-gray-600')
         
         # Create a container for the servers list that can be refreshed
         servers_container = ui.column().classes('w-full')
@@ -40,67 +62,57 @@ def show_content(container):
             
             if not current_servers:
                 with servers_container:
-                    ui.label('No servers configured').classes('italic text-secondary p-4')
+                    with ui.card().classes('w-full mb-6'):
+                        ui.label('No hay servidores configurados').classes('text-lg font-semibold text-center p-8')
+                        ui.label('Haz clic en "Agregar Servidor" para comenzar').classes('text-sm text-gray-600 text-center')
                 return
             
             with servers_container:
-                # Create a grid layout for server cards
-                with ui.grid(columns=3).classes('w-full gap-2'):
-                    for name, config in current_servers.items():
-                        # Determine server type
-                        if 'url' in config:
-                            server_type = 'HTTP'
-                            details = config.get('url', '')
-                            icon = 'cloud'
-                        elif 'command' in config:
-                            server_type = 'Local'
-                            details = f"{config.get('command', '')} {' '.join(config.get('args', []))}"
-                            icon = 'computer'
-                        else:
-                            server_type = 'Unknown'
-                            details = ''
-                            icon = 'help'
-                        
-                        # Determine status
-                        is_disabled = config.get('disabled', False)
-                        status = 'Disabled' if is_disabled else 'Active'
-                        
-                        # Create a card for each server with hover effect
-                        with ui.card().classes('w-full transition-shadow hover:shadow-lg q-ma-sm'):
-                            # Card header with server name and status badge
-                            with ui.card_section().classes(f"{'bg-primary' if status == 'Active' else 'bg-grey-7'} text-white"):
-                                with ui.row().classes('w-full items-center justify-between'):
-                                    with ui.row().classes('items-center'):
-                                        ui.icon(icon).classes('mr-2')
-                                        ui.label(name).classes('text-h6')
-                                    ui.badge(status).classes(f"{'bg-green' if status == 'Active' else 'bg-red'} text-white")
+                ui.label('Servidores Configurados').classes('text-lg font-semibold mb-4')
+                
+                for name, config in current_servers.items():
+                    # Determine server type and details
+                    if 'url' in config:
+                        server_type = 'HTTP'
+                        details = config.get('url', '')
+                        icon = 'cloud'
+                        color = 'info'
+                    elif 'command' in config:
+                        server_type = 'Local'
+                        details = f"{config.get('command', '')} {' '.join(config.get('args', []))}"
+                        icon = 'computer'
+                        color = 'secondary'
+                    else:
+                        server_type = 'Desconocido'
+                        details = ''
+                        icon = 'help'
+                        color = 'warning'
+                    
+                    # Determine status
+                    is_disabled = config.get('disabled', False)
+                    status = 'Deshabilitado' if is_disabled else 'Activo'
+                    
+                    # Server card
+                    with ui.card().classes('w-full mb-4'):
+                        with ui.row().classes('w-full items-center justify-between mb-3'):
+                            with ui.row().classes('items-center'):
+                                ui.icon(icon).classes(f'mr-2 text-{color}')
+                                ui.label(name).classes('text-lg font-semibold')
+                                ui.badge(status).classes(f"{'bg-green text-white' if not is_disabled else 'bg-gray text-white'} ml-2")
                             
-                            # Card content with server details and switch
-                            with ui.card_section().classes('q-pa-sm'):
-                                with ui.row().classes('w-full items-center justify-between q-mb-sm'):
-                                    with ui.column().classes('items-start'):
-                                        ui.label(f"Type: {server_type}").classes('text-bold')
-                                        ui.label(f"Status:").classes('text-caption')
-                                    
-                                    # Switch for enable/disable with label
-                                    with ui.column().classes('items-end'):
-                                        ui.switch(value=not is_disabled, on_change=lambda e, name=name:
-                                                toggle_server_status(name, not e.value)).props('color=primary label="Enabled"')
+                            with ui.row().classes('gap-2'):
+                                ui.switch(
+                                    value=not is_disabled,
+                                    on_change=lambda e, name=name: toggle_server_status(name, not e.value)
+                                ).props('color=primary').tooltip('Habilitar/Deshabilitar')
                                 
-                                # Server details in an expansion panel
-                                with ui.expansion('Details', icon='info').classes('w-full'):
-                                    ui.label(details).classes('text-caption q-pa-sm theme-bg-subtle rounded-borders')
-                            
-                            # Card actions
-                            with ui.card_section().classes('theme-bg-secondary q-pa-sm'):
-                                with ui.row().classes('w-full justify-end'):
-                                    # Edit button
-                                    ui.button('Edit', icon='edit', on_click=lambda name=name, config=config:
-                                            show_edit_dialog(name, config)).props('flat dense color=primary')
-                                    
-                                    # Delete button
-                                    ui.button('Delete', icon='delete', on_click=lambda name=name:
-                                            show_delete_dialog(name)).props('flat dense color=negative')
+                                ui.button('', icon='edit', on_click=lambda name=name, config=config: show_edit_dialog(name, config)).props('flat round color=primary size=sm').tooltip('Editar')
+                                ui.button('', icon='delete', on_click=lambda name=name: show_delete_dialog(name)).props('flat round color=negative size=sm').tooltip('Eliminar')
+                        
+                        ui.label(f'Tipo: {server_type}').classes('text-sm text-gray-600 mb-2')
+                        
+                        with ui.expansion('Detalles de Configuración', icon='info').classes('w-full'):
+                            ui.label(details).classes('text-sm font-mono bg-gray-100 p-2 rounded')
         
         # Function to toggle server status
         def toggle_server_status(server_name, is_active):
@@ -468,14 +480,6 @@ def show_content(container):
                 ui.notify('Configuration reset to default values', color='positive')
             except Exception as e:
                 ui.notify(f'Error resetting configuration: {str(e)}', color='negative')
-        
-        # Add buttons for adding a new server and resetting to default
-        with ui.row().classes('w-full justify-between q-mb-md'):
-            # Reset to default button on the left
-            ui.button('Reset to Default', on_click=reset_to_default, icon='refresh').props('color=warning')
-            
-            # Add server button on the right
-            ui.button('Add Server', on_click=show_add_dialog, icon='add').props('color=primary')
         
         # Initial load of the servers list
         refresh_servers_list()
