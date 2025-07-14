@@ -31,7 +31,6 @@ class MCPClientManager:
         """Initialize the MCP client with the given configuration."""
         # Prevent concurrent initializations
         if self._initializing:
-            print("MCP client initialization already in progress, skipping...")
             return False
         
         try:
@@ -39,10 +38,8 @@ class MCPClientManager:
             
             # Apply Termux workaround if needed
             if is_termux() or is_android():
-                print("Detected Termux/Android environment, applying compatibility workaround...")
                 setup_termux_environment()
                 config = apply_termux_workaround(config)
-                print(f"Applied Termux workaround. Modified config: {json.dumps(config, indent=2)}")
             
             self.config = config
             
@@ -59,7 +56,6 @@ class MCPClientManager:
                 
                 if active_servers:
                     self.active_servers = active_servers
-                    print(f"Active servers: {', '.join(active_servers.keys())}")
                     
                     # Use FastMCP's standard MCP configuration format
                     mcp_config = {"mcpServers": active_servers}
@@ -68,29 +64,21 @@ class MCPClientManager:
                         # Create the client - FastMCP handles all transport logic automatically
                         # FastMCP 2.8.1+ has fixed STDIO transport issues
                         self.client = Client(mcp_config)
-                        print(f"Successfully created MCP client with {len(active_servers)} servers")
                         
                         return True
                         
                     except Exception as e:
-                        print(f"Error creating MCP client: {str(e)}")
-                        print(f"Exception type: {type(e).__name__}")
                         traceback.print_exc()
                         return False
                 else:
-                    print("No active servers found in configuration")
                     return False
             else:
-                print("No MCP servers defined in configuration")
                 return False
         except Exception as e:
-            print(f"Unexpected error during MCP client initialization: {str(e)}")
-            print(f"Exception type: {type(e).__name__}")
             traceback.print_exc()
             return False
         finally:
             self._initializing = False
-            print("MCP client initialization process completed")
 
     def is_initialized(self) -> bool:
         """Check if the client is initialized."""
@@ -127,8 +115,6 @@ class MCPClientManager:
                 resources = await client.list_resources()
                 prompts = await client.list_prompts()
                 
-                print(f"Retrieved {len(tools)} tools, {len(resources)} resources, {len(prompts)} prompts")
-                
                 return {
                     "tools": [{"name": t.name, "description": getattr(t, 'description', '')} for t in tools],
                     "resources": [{"uri": r.uri, "name": getattr(r, 'name', '')} for r in resources],
@@ -136,7 +122,6 @@ class MCPClientManager:
                 }
                 
         except Exception as e:
-            print(f"Error getting capabilities: {str(e)}")
             traceback.print_exc()
             raise
 
@@ -159,13 +144,11 @@ class MCPClientManager:
         results = []
         
         try:
-            print(f"Executing {len(operations)} operations in single session...")
             
             # Single session for ALL operations - CORRECT pattern
             async with self.client as client:
                 for i, operation in enumerate(operations):
                     op_type = operation.get("type")
-                    print(f"Executing operation {i+1}/{len(operations)}: {op_type}")
                     
                     try:
                         if op_type == "list_tools":
@@ -206,14 +189,11 @@ class MCPClientManager:
                             raise ValueError(f"Unknown operation type: {op_type}")
                             
                     except Exception as e:
-                        print(f"Error in operation {i+1} ({op_type}): {str(e)}")
                         results.append({"error": str(e), "operation": operation})
                 
-                print(f"Completed {len(operations)} operations")
                 return results
                 
         except Exception as e:
-            print(f"Error executing operations: {str(e)}")
             traceback.print_exc()
             raise
 
@@ -253,6 +233,54 @@ class MCPClientManager:
         operations = [{"type": "get_prompt", "name": name, "arguments": arguments or {}}]
         results = await self.execute_operations(operations)
         return results[0] if results else []
+        
+    async def generate_response(self, context: Dict[str, Any]) -> Union[str, Dict[str, Any]]:
+        """
+        Generate a response from the LLM using the provided context.
+        
+        Args:
+            context: Dictionary containing message, tools, and resources
+            
+        Returns:
+            Response from the LLM (string or dictionary with tool calls)
+        """
+        if not self.client:
+            raise ValueError("MCP client not initialized")
+            
+        try:
+            # Get the first active server
+            server_names = self.get_server_names()
+            if not server_names:
+                raise ValueError("No active MCP servers available")
+                
+            server_name = server_names[0]
+            
+            # Extract the message from the context
+            message = context.get("message", "")
+            if not message:
+                raise ValueError("No message provided in context")
+                
+            # Get the conversation history if available
+            messages = context.get("messages", [])
+            
+            # Use the FastMCP client to generate a response
+            async with self.client as client:
+                # Call the LLM with the message and any available tools
+                response = await client.call_tool(
+                    "llm_generate",
+                    {
+                        "messages": messages if messages else [{"role": "user", "content": message}],
+                        "tools": context.get("tools", []),
+                        "resources": context.get("resources", []),
+                        "options": context.get("options", {})
+                    }
+                )
+                
+                return response
+                
+        except Exception as e:
+            traceback.print_exc()
+            raise McpClientError(f"Error generating response: {str(e)}") from e
 
     def get_active_servers(self) -> Dict[str, Any]:
         """Get active servers configuration."""
@@ -270,8 +298,7 @@ class MCPClientManager:
         """Close the client if needed."""
         # FastMCP handles cleanup automatically
         # No manual session management needed
-        if self.client:
-            print("MCP client manager closed")
+        pass
 
 # Create a singleton instance
 mcp_client_manager = MCPClientManager()

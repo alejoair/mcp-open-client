@@ -49,6 +49,35 @@ def show_content(container):
             else:
                 ui.label('No hay servidores configurados').classes('text-sm text-gray-600')
         
+        # Meta Tools List Card
+        with ui.card().classes('w-full mb-6'):
+            ui.label('Meta Tools Disponibles').classes('text-lg font-semibold mb-3')
+            ui.label('Lista de todas las herramientas que el LLM puede usar para interactuar con el sistema.').classes('text-sm text-gray-600 mb-2')
+            
+            # Obtener todas las meta tools disponibles
+            from mcp_open_client.meta_tools import meta_tool_registry
+            
+            # Mostrar lista de meta tools en formato más compatible
+            if meta_tool_registry.tools:
+                # Crear una tabla manual con divs en lugar de ui.table()
+                with ui.element('div').classes('w-full border rounded').style('max-height: 300px; overflow-y: auto;'):
+                    # Encabezados
+                    with ui.element('div').classes('bg-primary text-white flex'):
+                        with ui.element('div').classes('p-2 w-1/3'):
+                            ui.label('Nombre')
+                        with ui.element('div').classes('p-2 w-2/3'):
+                            ui.label('Descripción')
+                    
+                    # Filas
+                    for name, schema in meta_tool_registry.tool_schemas.items():
+                        with ui.element('div').classes('flex border-b hover:bg-gray-100'):
+                            with ui.element('div').classes('p-2 font-mono text-xs w-1/3'):
+                                ui.label(name)
+                            with ui.element('div').classes('p-2 text-sm w-2/3'):
+                                ui.label(schema['description'])
+            else:
+                ui.label('No hay Meta Tools registradas').classes('text-sm italic text-gray-500')
+        
         # Create a container for the servers list that can be refreshed
         servers_container = ui.column().classes('w-full')
         

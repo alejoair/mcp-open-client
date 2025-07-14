@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Dict, Any, List
 from mcp_open_client.mcp_client import mcp_client_manager
+from mcp_open_client.meta_tools import meta_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -204,53 +205,82 @@ Please retry with properly formatted JSON."""
         # Validate and clean arguments
         arguments = validate_and_clean_arguments(arguments, tool_name)
         
-        logger.info(f"Calling MCP tool: {tool_name} with arguments: {arguments}")
+        # Determine if this is a meta tool or an MCP tool
+        is_meta_tool = tool_name.startswith("meta-") or f"meta-{tool_name}" in meta_tool_registry.tools
         
-        
-        # Call the MCP tool
+        # Execute the appropriate tool based on type
         try:
-            result = await mcp_client_manager.call_tool(tool_name, arguments)
-            
-            # Check if the result contains an error (from MCP client error handling)
-            if result and isinstance(result, dict) and 'error' in result:
-                # This is an error returned by the MCP client
-                error_msg = result['error']
-                operation_info = result.get('operation', {})
+            if is_meta_tool:
+                logger.info(f"Calling meta tool: {tool_name} with arguments: {arguments}")
+                result = await meta_tool_registry.execute_tool(tool_name, arguments)
                 
-                # Check if this is a Pydantic validation error and format it nicely
-                if "validation error" in error_msg.lower() or "missing required argument" in error_msg.lower():
-                    detailed_error = parse_pydantic_error(error_msg, tool_name, arguments)
-                else:
-                    # Create detailed error message for other types of errors
-                    detailed_error = f"MCP Tool Error: {error_msg}"
-                    if operation_info:
-                        detailed_error += f"\nTool: {operation_info.get('name', tool_name)}"
-                        detailed_error += f"\nArguments: {operation_info.get('params', arguments)}"
-                
-                logger.error(f"MCP tool call failed: {tool_name} - {error_msg}")
-                return {
-                    "tool_call_id": tool_call_id,
-                    "role": "tool",
-                    "content": detailed_error
-                }
-            
-            # Format the successful result for the LLM
-            if result:
-                # MCP returns a list of content items, we'll join them
-                content_parts = []
-                for item in result:
-                    if hasattr(item, 'text'):
-                        content_parts.append(item.text)
-                    elif isinstance(item, dict) and 'text' in item:
-                        content_parts.append(item['text'])
+                # Format meta tool result for the LLM
+                if result and isinstance(result, dict):
+                    if 'error' in result:
+                        # Handle meta tool error
+                        error_msg = result['error']
+                        logger.error(f"Meta tool call failed: {tool_name} - {error_msg}")
+                        return {
+                            "tool_call_id": tool_call_id,
+                            "role": "tool",
+                            "content": f"Meta Tool Error: {error_msg}\nTool: {tool_name}\nArguments: {arguments}"
+                        }
+                    elif 'result' in result:
+                        # Success with result
+                        content = str(result['result'])
                     else:
-                        content_parts.append(str(item))
-                
-                content = "\n".join(content_parts) if content_parts else "Tool executed successfully"
+                        # Success with unknown format
+                        content = f"Meta tool executed successfully: {str(result)}"
+                else:
+                    # Default success message
+                    content = "Meta tool executed successfully (no output)"
+                    
+                logger.info(f"Meta tool call successful: {tool_name}")
             else:
-                content = "Tool executed successfully (no output)"
-            
-            logger.info(f"Tool call successful: {tool_name}")
+                # It's a regular MCP tool
+                logger.info(f"Calling MCP tool: {tool_name} with arguments: {arguments}")
+                result = await mcp_client_manager.call_tool(tool_name, arguments)
+                
+                # Check if the result contains an error (from MCP client error handling)
+                if result and isinstance(result, dict) and 'error' in result:
+                    # This is an error returned by the MCP client
+                    error_msg = result['error']
+                    operation_info = result.get('operation', {})
+                    
+                    # Check if this is a Pydantic validation error and format it nicely
+                    if "validation error" in error_msg.lower() or "missing required argument" in error_msg.lower():
+                        detailed_error = parse_pydantic_error(error_msg, tool_name, arguments)
+                    else:
+                        # Create detailed error message for other types of errors
+                        detailed_error = f"MCP Tool Error: {error_msg}"
+                        if operation_info:
+                            detailed_error += f"\nTool: {operation_info.get('name', tool_name)}"
+                            detailed_error += f"\nArguments: {operation_info.get('params', arguments)}"
+                    
+                    logger.error(f"MCP tool call failed: {tool_name} - {error_msg}")
+                    return {
+                        "tool_call_id": tool_call_id,
+                        "role": "tool",
+                        "content": detailed_error
+                    }
+                
+                # Format the successful result for the LLM
+                if result:
+                    # MCP returns a list of content items, we'll join them
+                    content_parts = []
+                    for item in result:
+                        if hasattr(item, 'text'):
+                            content_parts.append(item.text)
+                        elif isinstance(item, dict) and 'text' in item:
+                            content_parts.append(item['text'])
+                        else:
+                            content_parts.append(str(item))
+                    
+                    content = "\n".join(content_parts) if content_parts else "Tool executed successfully"
+                else:
+                    content = "Tool executed successfully (no output)"
+                
+                logger.info(f"MCP tool call successful: {tool_name}")
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
@@ -277,10 +307,10 @@ Please retry with properly formatted JSON."""
 
 async def get_available_tools() -> List[Dict[str, Any]]:
     """
-    Get all available MCP tools formatted for OpenAI tool calling.
+    Get all available tools (MCP and meta tools) formatted for OpenAI tool calling.
     
     Returns:
-        List of tool definitions in OpenAI format
+        List of tool definitions in OpenAI format, including both MCP tools and meta tools
     """
     try:
         logger.info("Getting available MCP tools")
@@ -349,7 +379,18 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                 logger.warning(f"Error converting tool {tool}: {e}")
                 continue
         
-        logger.info(f"Available tools: {len(openai_tools)}")
+        # Add meta tools to the list
+        try:
+            meta_tools = meta_tool_registry.get_tools_schema()
+            if meta_tools:
+                logger.info(f"Retrieved {len(meta_tools)} meta tools")
+                print(f"DEBUG: Retrieved {len(meta_tools)} meta tools")
+                openai_tools.extend(meta_tools)
+        except Exception as e:
+            logger.error(f"Error getting meta tools: {e}")
+            print(f"DEBUG: Error getting meta tools: {e}")
+        
+        logger.info(f"Available tools: {len(openai_tools)} total (MCP + meta tools)")
         return openai_tools
         
     except Exception as e:
