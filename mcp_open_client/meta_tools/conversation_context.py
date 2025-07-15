@@ -106,7 +106,6 @@ def _clear_context() -> None:
 def _get_context_items() -> List[Dict[str, Any]]:
     """Obtiene los elementos del contexto como lista."""
     context_content = _get_current_context()
-    print(f"DEBUG _get_context_items: context_content length={len(context_content) if context_content else 0}")
     if not context_content:
         return []
     
@@ -170,7 +169,6 @@ def _ensure_context_as_penultimate(items_override: List[Dict[str, Any]] = None) 
     messages = conversations[conversation_id]['messages']
     items = items_override if items_override is not None else _get_context_items()
     
-    print(f"DEBUG _ensure_context_as_penultimate: items_override={items_override is not None}, items_count={len(items) if items else 0}")
     
     # Buscar mensaje de contexto existente
     existing_context_msg = None
@@ -211,7 +209,7 @@ def _ensure_context_as_penultimate(items_override: List[Dict[str, Any]] = None) 
         app.storage.user['conversations'] = conversations
     elif existing_context_msg:
         # Si no hay items pero existe un mensaje de contexto, preservarlo
-        print(f"DEBUG _ensure_context_as_penultimate: preserving existing context message")
+        pass
         # El mensaje ya está en su lugar, no necesitamos hacer nada
 
 def _update_persistent_context_message() -> None:
@@ -464,7 +462,7 @@ def register_conversation_hook():
         timeout=3000
     )
     
-    return {"success": True, "message": "Contexto de conversación registrado correctamente."}
+    return {"success": True, "message": "Contexto registrado."}
 
 # Nuevas meta tools para manejar elementos del contexto
 

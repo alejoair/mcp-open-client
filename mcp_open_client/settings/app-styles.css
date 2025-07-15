@@ -84,10 +84,6 @@ strong {
     font-size: 1rem !important;
 }
 
-/* Reduce message padding */
-.nicegui-card {
-    padding: 8px !important;
-}
 
 /* Reduce markdown content spacing */
 .nicegui-markdown {

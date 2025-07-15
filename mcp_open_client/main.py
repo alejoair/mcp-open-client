@@ -101,8 +101,6 @@ async def init_mcp_client():
             if success:
                 active_servers = mcp_client_manager.get_active_servers()
                 server_count = len(active_servers)
-                print(f"Successfully connected to {server_count} MCP servers")
-                print(f"Active servers: {', '.join(active_servers.keys())}")
                 # Use app.storage to communicate with the UI
                 app.storage.user['mcp_status'] = f"Connected to {server_count} MCP servers"
                 app.storage.user['mcp_status_color'] = 'positive'
@@ -110,7 +108,6 @@ async def init_mcp_client():
                 # Registrar el hook de contexto de conversación
                 try:
                     register_conversation_hook()
-                    print("Sistema de contexto de conversación activado")
                 except Exception as e:
                     print(f"Error al registrar el hook de contexto: {str(e)}")
             else:
@@ -266,16 +263,21 @@ def setup_ui():
         
         # Initialize storage first
         init_storage()
-                # Configure NiceGUI color theme to match our brand
-        ui.colors(
-            primary='#dc2626',      # Red to match favicon
-            secondary='#1f2937',    # Dark gray
-            accent='#3b82f6',       # Blue accent
-            positive='#10b981',     # Green for success
-            negative='#ef4444',     # Red for errors
-            info='#3b82f6',         # Blue for info
-            warning='#f59e0b'       # Orange for warnings
-        )
+        
+        # Configure NiceGUI color theme - load from storage or use defaults
+        default_colors = {
+            'primary': '#dc2626',      # Red to match favicon
+            'secondary': '#1f2937',    # Dark gray
+            'accent': '#3b82f6',       # Blue accent
+            'positive': '#10b981',     # Green for success
+            'negative': '#ef4444',     # Red for errors
+            'info': '#3b82f6',         # Blue for info
+            'warning': '#f59e0b'       # Orange for warnings
+        }
+        
+        # Load saved colors or use defaults
+        saved_colors = app.storage.user.get('ui_colors', default_colors)
+        ui.colors(**saved_colors)
         # Run the MCP initialization asynchronously
         asyncio.create_task(init_mcp_client())
         
