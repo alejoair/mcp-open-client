@@ -185,7 +185,7 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
             stats_update_callback()
         
         # Check if conversation should be auto-renamed
-        await _check_auto_rename_conversation()
+        _check_auto_rename_conversation()
 
 def find_tool_response(tool_call_id: str) -> Optional[str]:
     """Find the tool response for a given tool call ID"""
@@ -300,22 +300,57 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
     global _scroll_timer
     
     try:
+        # DEBUG: Log scroll attempts
+        print(f"🔄 SCROLL ATTEMPT [WORKING VERSION]: delay={delay}, existing_timer={_scroll_timer is not None}")
+        print(f"📏 Context info: scroll_area={type(scroll_area)}, id={getattr(scroll_area, 'id', 'N/A')}")
+        print(f"🎯 Called from: WORKING message flow (new messages/LLM responses)")
+        
         # Cancel any existing scroll timer to debounce multiple calls
         if _scroll_timer is not None:
+            print(f"❌ CANCELING previous scroll timer")
             _scroll_timer.cancel()
+            _scroll_timer = None
         
-        # Create a new timer with the specified delay
-        def do_scroll():
-            try:
-                scroll_area.scroll_to(percent=1.0)
-            except Exception as e:
-                print(f"Scroll error (non-critical): {e}")
-        
-        # Use ui.timer for better DOM synchronization
-        _scroll_timer = ui.timer(delay, do_scroll, once=True)
+        # Try to use ui.timer first (when in UI context)
+        try:
+            def do_scroll():
+                try:
+                    print(f"⬇️ EXECUTING SCROLL to bottom [WORKING VERSION] (via ui.timer)")
+                    print(f"📋 Pre-scroll state: scroll_area type={type(scroll_area)}")
+                    print(f"🎯 Context: Called from working message flow (new messages/LLM responses)")
+                    
+                    # Execute the scroll
+                    scroll_area.scroll_to(percent=1.0)
+                    
+                    print(f"✅ SCROLL COMPLETED [WORKING VERSION] - scroll_to(percent=1.0) executed")
+                    print(f"🏆 Post-scroll: Command sent to scroll_area successfully")
+                except Exception as e:
+                    print(f"❌ Scroll error [WORKING VERSION] (non-critical): {e}")
+            
+            print(f"⏰ SETTING ui.timer [WORKING VERSION] with delay={delay}")
+            print(f"🕰️ Timer context: Called from working message flow")
+            _scroll_timer = ui.timer(delay, do_scroll, once=True)
+            print(f"✅ Timer set successfully [WORKING VERSION]")
+            
+        except Exception as timer_error:
+            # Fallback: Use asyncio.sleep when ui.timer fails (no UI context)
+            print(f"⚠️ ui.timer failed, using asyncio.sleep fallback: {timer_error}")
+            
+            async def async_scroll():
+                try:
+                    await asyncio.sleep(delay)
+                    print(f"⬇️ EXECUTING SCROLL to bottom (via asyncio.sleep)")
+                    print(f"📊 Scroll area info: {type(scroll_area)}, hasattr scroll_to: {hasattr(scroll_area, 'scroll_to')}")
+                    scroll_area.scroll_to(percent=1.0)
+                    print(f"✅ SCROLL COMPLETED - scroll_to(percent=1.0) executed")
+                except Exception as e:
+                    print(f"❌ Scroll error (non-critical): {e}")
+            
+            # Execute the async scroll without blocking
+            asyncio.create_task(async_scroll())
         
     except Exception as e:
-        print(f"Scroll setup error (non-critical): {e}")
+        print(f"❌ Scroll setup error (non-critical): {e}")
 
 def render_tool_call_and_result(chat_container, tool_call, tool_result):
     """Render tool call and result in the UI"""
