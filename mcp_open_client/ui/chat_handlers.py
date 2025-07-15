@@ -183,6 +183,9 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         # This will use our enhanced token counting with tiktoken
         if stats_update_callback:
             stats_update_callback()
+        
+        # Check if conversation should be auto-renamed
+        await _check_auto_rename_conversation()
 
 def find_tool_response(tool_call_id: str) -> Optional[str]:
     """Find the tool response for a given tool call ID"""
@@ -865,5 +868,87 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             # Update stats after completion
             if stats_update_callback:
                 stats_update_callback()
+ 
 
+# Auto-rename conversation functionality
+async def _check_auto_rename_conversation():
+    """Check if current conversation should be auto-renamed and perform the rename."""
+    global current_conversation_id
+    
+    if not current_conversation_id:
+        return
+    
+    try:
+        # Import here to avoid circular imports
+        from .conversation_title_manager import get_title_manager
+        
+        conversations = get_conversation_storage()
+        if current_conversation_id not in conversations:
+            return
+        
+        conversation = conversations[current_conversation_id]
+        messages = conversation.get('messages', [])
+        
+        # Get title manager instance
+        title_manager = get_title_manager()
+        
+        # Check if conversation should be auto-renamed
+        if title_manager.should_auto_rename(messages):
+            # Check if title is still the default one
+            current_title = conversation.get('title', '')
+            if current_title.startswith('Conversation '):
+                # Generate new title
+                new_title = await title_manager.generate_conversation_title(messages)
+                
+                # Update conversation title
+                conversations[current_conversation_id]['title'] = new_title
+                conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
+                app.storage.user['conversations'] = conversations
+                
+                # Refresh conversations list in UI to show new title
+                from .conversation_manager import conversation_manager
+                conversation_manager.refresh_conversations_list()
+                
+                print(f"Auto-renamed conversation to: '{new_title}'")
+    
+    except Exception as e:
+        print(f"Error in auto-rename: {str(e)}")
+        # Don't raise exception to avoid breaking the main flow
+
+
+def rename_conversation(conversation_id: str, new_title: str) -> bool:
+    """Manually rename a conversation.
+    
+    Args:
+        conversation_id: ID of the conversation to rename
+        new_title: New title for the conversation
+        
+    Returns:
+        True if rename was successful, False otherwise
+    """
+    try:
+        from .conversation_title_manager import get_title_manager
+        
+        conversations = get_conversation_storage()
+        if conversation_id not in conversations:
+            return False
+        
+        # Validate the new title
+        title_manager = get_title_manager()
+        validated_title = title_manager.validate_title(new_title)
+        
+        # Update conversation title
+        conversations[conversation_id]['title'] = validated_title
+        conversations[conversation_id]['updated_at'] = str(uuid.uuid1().time)
+        app.storage.user['conversations'] = conversations
+        
+        # Refresh conversations list in UI
+        from .conversation_manager import conversation_manager
+        conversation_manager.refresh_conversations_list()
+        
+        return True
+    
+    except Exception as e:
+        print(f"Error renaming conversation: {str(e)}")
+        return False
 
