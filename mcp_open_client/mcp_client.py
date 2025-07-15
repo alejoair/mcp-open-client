@@ -171,8 +171,16 @@ class MCPClientManager:
                             tool_name = operation.get("name")
                             params = operation.get("params", {})
                             result = await client.call_tool(tool_name, params)
-                            # Keep original FastMCP objects - no unnecessary conversion
-                            results.append(result)
+                            
+                            # Normalize result to ensure consistent format across FastMCP versions
+                            if hasattr(result, 'content'):
+                                # CallToolResult object - extract content
+                                normalized_result = result.content if result.content else []
+                            else:
+                                # Direct list or other format
+                                normalized_result = result if result else []
+                            
+                            results.append(normalized_result)
                         
                         elif op_type == "read_resource":
                             uri = operation.get("uri")
