@@ -264,13 +264,9 @@ def setup_ui():
         ui.add_head_html('<meta name="apple-mobile-web-app-status-bar-style" content="default">')
         ui.add_css(os.path.join(os.path.dirname(__file__), 'settings', 'app-styles.css'))
         
-        # Add static route for the animated background SVG
-        app.add_static_file(
-            local_file=os.path.join(os.path.dirname(__file__), 'settings', 'animated-background.svg'),
-            url_path='/animated-background.svg'
-        )
-        
-        # Configure NiceGUI color theme to match our brand
+        # Initialize storage first
+        init_storage()
+                # Configure NiceGUI color theme to match our brand
         ui.colors(
             primary='#dc2626',      # Red to match favicon
             secondary='#1f2937',    # Dark gray
@@ -280,10 +276,6 @@ def setup_ui():
             info='#3b82f6',         # Blue for info
             warning='#f59e0b'       # Orange for warnings
         )
-        
-        # Initialize storage first
-        init_storage()
-        
         # Run the MCP initialization asynchronously
         asyncio.create_task(init_mcp_client())
         
@@ -450,7 +442,7 @@ favicon_svg = '''
 ui.run(
     title="MCP Open Client",
     storage_secret="ultrasecretkeyboard",
-    port=8090,
+    port=8091,
     reload=False,
     dark=True,
     show_welcome_message=True,
