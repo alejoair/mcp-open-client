@@ -51,14 +51,55 @@ def create_chat_interface(container):
                             load_conversation_messages(message_container)
                     
                 # Set up conversation manager callback to refresh chat
-                async def refresh_chat():
+                def refresh_chat():
+                    print(f"🔄 REFRESH_CHAT called - Loading conversation")
                     message_container.clear()
                     load_conversation_messages(message_container)
                     # Update stats when conversation changes
                     stats_container.update_stats()
-                    # Import and use the improved scroll function
-                    from .chat_handlers import safe_scroll_to_bottom
-                    await safe_scroll_to_bottom(scroll_area, delay=0.3)
+                    
+                    # Use longer delay for conversation loading (DOM needs more time)
+                    def do_scroll():
+                        print(f"⬇️ SCROLL CONVERSATION LOAD - DOM ready, executing scroll")
+                        
+                        # Find the current scroll_area dynamically instead of using stale reference
+                        try:
+                            # Query for the scroll area with the specific class
+                            current_scroll_areas = [elem for elem in ui.context.client.elements.values() 
+                                                   if hasattr(elem, '__class__') and 
+                                                   elem.__class__.__name__ == 'ScrollArea' and 
+                                                   hasattr(elem, 'classes') and 
+                                                   'chat-messages' in str(elem.classes)]
+                            
+                            if current_scroll_areas:
+                                current_scroll_area = current_scroll_areas[0]  # Take the first (should be only one)
+                                print(f"📎 SCROLL DEBUG: Found current scroll_area={type(current_scroll_area)}, id={getattr(current_scroll_area, 'id', 'N/A')}")
+                                print(f"📏 SCROLL DEBUG: message_container children={len(message_container.default_slot.children) if hasattr(message_container, 'default_slot') else 'N/A'}")
+                                
+                                result = current_scroll_area.scroll_to(percent=1.0)
+                                print(f"✅ SCROLL COMPLETED - conversation load, result={result}")
+                                print(f"🎯 SCROLL DEBUG: scroll_to called successfully on current scroll_area")
+                            else:
+                                print(f"❌ No scroll_area found with chat-messages class")
+                                # Fallback to original reference
+                                print(f"📎 FALLBACK: Using original scroll_area={type(scroll_area)}, id={getattr(scroll_area, 'id', 'N/A')}")
+                                result = scroll_area.scroll_to(percent=1.0)
+                                print(f"✅ FALLBACK SCROLL COMPLETED")
+                                
+                        except Exception as e:
+                            print(f"❌ Scroll error: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    
+                    try:
+                        # Use longer delay for conversation loading - DOM needs more time to render
+                        print(f"⏰ SETTING ui.timer for conversation load with delay=0.3 (longer for DOM)")
+                        ui.timer(0.3, do_scroll, once=True)
+                        print(f"✅ Timer set successfully for conversation load")
+                    except Exception as timer_error:
+                        print(f"⚠️ ui.timer failed for conversation load: {timer_error}")
+                    
+                    print(f"✅ REFRESH_CHAT completed")
                 
                 conversation_manager.set_refresh_callback(refresh_chat)
 
@@ -120,8 +161,10 @@ def create_chat_interface(container):
 def load_conversation_messages(message_container):
     """Load messages from the current conversation"""
     messages = get_messages()
+    print(f"📝 LOADING MESSAGES: Found {len(messages) if messages else 0} messages")
     
     if not messages:
+        print(f"👋 SHOWING welcome message - no conversation active")
         # Show welcome message if no conversation is active
         with message_container:
             with ui.card().classes('') as welcome_card:
@@ -134,7 +177,9 @@ Try asking me something or create a new conversation to get started.'''
                 parse_and_render_message(welcome_message, welcome_card)
         return
     
+    print(f"🎨 RENDERING {len(messages)} messages to container")
     render_messages(message_container)
+    print(f"✅ MESSAGES RENDERED successfully")
 
 def render_messages(message_container):
     """Render all messages from the current conversation"""
