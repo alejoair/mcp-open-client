@@ -42,7 +42,7 @@ def attempt_json_repair(json_str: str) -> tuple[dict, bool]:
             repaired_str = repair_func(json_str)
             if repaired_str != json_str:
                 result = json.loads(repaired_str)
-                logger.info(f"Successfully repaired JSON: {original_str[:100]}... -> {repaired_str[:100]}...")
+         
                 return result, True
         except (json.JSONDecodeError, Exception):
             continue
@@ -151,8 +151,7 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         logger.info(f"Handling tool call: {tool_call}")
-        logger.debug(f"Tool call structure: {json.dumps(tool_call, indent=2, default=str)}")
-        
+
         # Extract tool information
         tool_call_id = tool_call.get("id")
         function_info = tool_call.get("function", {})
@@ -177,7 +176,7 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             
             if was_repaired:
                 logger.warning(f"Successfully repaired malformed JSON for tool '{tool_name}'")
-                logger.debug(f"Original: {repr(arguments_str[:200])}...")
+              
             else:
                 # Repair failed, return detailed error to LLM
                 error_msg = f"Invalid JSON in tool arguments: {e}"
@@ -211,7 +210,7 @@ Please retry with properly formatted JSON."""
         # Execute the appropriate tool based on type
         try:
             if is_meta_tool:
-                logger.info(f"Calling meta tool: {tool_name} with arguments: {arguments}")
+                
                 result = await meta_tool_registry.execute_tool(tool_name, arguments)
                 
                 # Format meta tool result for the LLM
@@ -238,7 +237,7 @@ Please retry with properly formatted JSON."""
                 logger.info(f"Meta tool call successful: {tool_name}")
             else:
                 # It's a regular MCP tool
-                logger.info(f"Calling MCP tool: {tool_name} with arguments: {arguments}")
+                
                 result = await mcp_client_manager.call_tool(tool_name, arguments)
                 
                 # Check if the result contains an error (from MCP client error handling)
@@ -314,23 +313,21 @@ async def get_available_tools() -> List[Dict[str, Any]]:
     """
     try:
         logger.info("Getting available MCP tools")
-        print("DEBUG: Getting available MCP tools")
+       
         
         # Check if MCP client is connected
         if not mcp_client_manager.is_connected():
-            print("DEBUG: MCP client is not connected")
+
             logger.warning("MCP client is not connected")
             return []
         
-        print("DEBUG: MCP client is connected")
+       
         
         # Get tools from MCP client manager
         mcp_tools = await mcp_client_manager.list_tools()
-        print(f"DEBUG: Retrieved {len(mcp_tools) if mcp_tools else 0} MCP tools")
-        
+ 
         if not mcp_tools:
             logger.info("No MCP tools available")
-            print("DEBUG: No MCP tools available")
             return []
         
         # Convert MCP tools to OpenAI format
@@ -344,14 +341,13 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                     name = tool.name
                     description = tool.description
                     input_schema = tool.inputSchema
-                    print(f"DEBUG: Tool {name} - inputSchema type: {type(input_schema)}, value: {input_schema}")
+                    
                 else:
                     # Dict format
                     name = tool.get("name", "")
                     description = tool.get("description", "")
                     input_schema = tool.get("inputSchema")
-                    print(f"DEBUG: Tool {name} (dict) - inputSchema type: {type(input_schema)}, value: {input_schema}")
-                
+                    
                 openai_tool = {
                     "type": "function",
                     "function": {
@@ -372,7 +368,7 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                     }
                 
                 openai_tools.append(openai_tool)
-                logger.debug(f"Converted tool: {name}")
+                
                 
                 
             except Exception as e:
@@ -383,12 +379,11 @@ async def get_available_tools() -> List[Dict[str, Any]]:
         try:
             meta_tools = meta_tool_registry.get_tools_schema()
             if meta_tools:
-                logger.info(f"Retrieved {len(meta_tools)} meta tools")
-                print(f"DEBUG: Retrieved {len(meta_tools)} meta tools")
+                
                 openai_tools.extend(meta_tools)
         except Exception as e:
             logger.error(f"Error getting meta tools: {e}")
-            print(f"DEBUG: Error getting meta tools: {e}")
+   
         
         logger.info(f"Available tools: {len(openai_tools)} total (MCP + meta tools)")
         return openai_tools

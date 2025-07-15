@@ -6,26 +6,272 @@ en las conversaciones que siempre se presenta justo antes del mensaje del usuari
 """
 
 import logging
+import uuid
+import json
 from typing import Dict, Any, Optional, List
 from nicegui import ui, app
 from mcp_open_client.meta_tools.meta_tool import meta_tool
 
 logger = logging.getLogger(__name__)
 
-# Clave para almacenar el contexto en el storage de la aplicación
-CONTEXT_STORAGE_KEY = 'conversation_context'
-
 def _get_current_context() -> str:
-    """Obtiene el contexto actual de la conversación."""
-    return app.storage.user.get(CONTEXT_STORAGE_KEY, "")
+    """Obtiene el contexto actual de la conversación desde el historial de mensajes."""
+    from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+    
+    conversation_id = get_current_conversation_id()
+    if not conversation_id:
+        return ""
+    
+    conversations = get_conversation_storage()
+    if conversation_id not in conversations:
+        return ""
+    
+    messages = conversations[conversation_id]['messages']
+    
+    # Buscar el mensaje de contexto (sistema que contiene "CONTEXTO DE LA CONVERSACIÓN:")
+    for msg in messages:
+        if (msg.get('role') == 'system' and 
+            msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')):
+            # Extraer solo el contenido del contexto, sin el prefijo
+            content = msg.get('content', '')
+            if content.startswith('CONTEXTO DE LA CONVERSACIÓN:\n\n'):
+                return content[len('CONTEXTO DE LA CONVERSACIÓN:\n\n'):]
+    
+    return ""
 
 def _set_context(context: str) -> None:
-    """Establece el contexto de la conversación."""
-    app.storage.user[CONTEXT_STORAGE_KEY] = context
+    """Establece el contexto de la conversación en el historial de mensajes."""
+    from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+    
+    conversation_id = get_current_conversation_id()
+    if not conversation_id:
+        return
+    
+    conversations = get_conversation_storage()
+    if conversation_id not in conversations:
+        return
+    
+    messages = conversations[conversation_id]['messages']
+    
+    # Remover mensaje de contexto existente
+    messages[:] = [msg for msg in messages if not (
+        msg.get('role') == 'system' and 
+        msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')
+    )]
+    print(f"DEBUG _set_context: conversation_id={conversation_id}, context length={len(context) if context else 0}")
+    
+    # Si hay contexto, insertarlo como penúltimo mensaje
+    if context and context.strip():
+        context_message = {
+            'role': 'system',
+            'content': f'CONTEXTO DE LA CONVERSACIÓN:\n\n{context}',
+            'timestamp': str(uuid.uuid1().time),
+            'is_context': True
+        }
+        
+        # Insertar antes del último mensaje (si existe)
+        if messages:
+            messages.insert(-1, context_message)
+        else:
+            messages.append(context_message)
+            
+        # Guardar cambios en el storage
+        conversations[conversation_id]['updated_at'] = str(uuid.uuid1().time)
+        app.storage.user['conversations'] = conversations
 
 def _clear_context() -> None:
-    """Limpia el contexto de la conversación."""
-    app.storage.user[CONTEXT_STORAGE_KEY] = ""
+    """Limpia el contexto de la conversación del historial de mensajes."""
+    from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+    
+    conversation_id = get_current_conversation_id()
+    if not conversation_id:
+        return
+    
+    conversations = get_conversation_storage()
+    if conversation_id not in conversations:
+        return
+    
+    messages = conversations[conversation_id]['messages']
+    
+    # Remover todos los mensajes de contexto
+    messages[:] = [msg for msg in messages if not (
+        msg.get('role') == 'system' and 
+        msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')
+    )]
+    
+    # Guardar cambios en el storage
+    conversations[conversation_id]['updated_at'] = str(uuid.uuid1().time)
+    app.storage.user['conversations'] = conversations
+
+def _get_context_items() -> List[Dict[str, Any]]:
+    """Obtiene los elementos del contexto como lista."""
+    context_content = _get_current_context()
+    print(f"DEBUG _get_context_items: context_content length={len(context_content) if context_content else 0}")
+    if not context_content:
+        return []
+    
+    try:
+        # Intentar parsear como JSON
+        parsed = json.loads(context_content)
+        
+        # Verificar si es el nuevo formato con wrapper
+        if isinstance(parsed, dict) and parsed.get("_mcp_context_format") == "elements_v1":
+            return parsed.get("items", [])
+        
+        # Si es una lista directa (formato anterior), devolverla
+        if isinstance(parsed, list):
+            return parsed
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    # Si no es JSON válido, ignorar el contexto anterior
+    return []
+
+def _set_context_items(items: List[Dict[str, Any]]) -> None:
+    """Establece los elementos del contexto."""
+    print(f"DEBUG _set_context_items: items count={len(items) if items else 0}")
+    if not items:
+        _clear_context()
+        return
+    
+    # Crear wrapper con metadatos para distinguir el nuevo formato
+    wrapper = {
+        "_mcp_context_format": "elements_v1",
+        "items": items
+    }
+    context_json = json.dumps(wrapper, ensure_ascii=False, indent=2)
+    _set_context(context_json)
+
+def _format_context_for_display(items: List[Dict[str, Any]]) -> str:
+    """Formatea los elementos del contexto para mostrar al LLM."""
+    if not items:
+        return ""
+    
+    formatted_items = []
+    for i, item in enumerate(items, 1):
+        content = item.get('content', '')
+        item_id = item.get('id', f'item-{i}')
+        formatted_items.append(f"{i}. [{item_id}] {content}")
+    
+    return "\n".join(formatted_items)
+
+def _ensure_context_as_penultimate(items_override: List[Dict[str, Any]] = None) -> None:
+    """Asegura que el contexto esté siempre como penúltimo mensaje en la conversación."""
+    from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+    
+    conversation_id = get_current_conversation_id()
+    if not conversation_id:
+        return
+    
+    conversations = get_conversation_storage()
+    if conversation_id not in conversations:
+        return
+    
+    messages = conversations[conversation_id]['messages']
+    items = items_override if items_override is not None else _get_context_items()
+    
+    print(f"DEBUG _ensure_context_as_penultimate: items_override={items_override is not None}, items_count={len(items) if items else 0}")
+    
+    # Buscar mensaje de contexto existente
+    existing_context_msg = None
+    for msg in messages:
+        if (msg.get('role') == 'system' and 
+            msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')):
+            existing_context_msg = msg
+            break
+    
+    # Si hay elementos de contexto, actualizar/crear el mensaje
+    if items and messages:
+        # Remover mensaje de contexto existente solo si vamos a reemplazarlo
+        messages[:] = [msg for msg in messages if not (
+            msg.get('role') == 'system' and 
+            msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')
+        )]
+        
+        formatted_context = _format_context_for_display(items)
+        
+        # Guardar tanto el JSON de elementos como el texto formateado
+        items_json = json.dumps({
+            "_mcp_context_format": "elements_v1",
+            "items": items
+        })
+        
+        context_message = {
+            'role': 'system',
+            'content': f'CONTEXTO DE LA CONVERSACIÓN:\n\n{items_json}',
+            'timestamp': str(uuid.uuid1().time),
+            'is_context': True
+        }
+        
+        # Insertar como penúltimo mensaje
+        messages.insert(-1, context_message)
+        
+        # Guardar cambios en el storage
+        conversations[conversation_id]['updated_at'] = str(uuid.uuid1().time)
+        app.storage.user['conversations'] = conversations
+    elif existing_context_msg:
+        # Si no hay items pero existe un mensaje de contexto, preservarlo
+        print(f"DEBUG _ensure_context_as_penultimate: preserving existing context message")
+        # El mensaje ya está en su lugar, no necesitamos hacer nada
+
+def _update_persistent_context_message() -> None:
+    """Actualiza o crea el mensaje de contexto persistente en la conversación actual."""
+    from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+    
+    conversation_id = get_current_conversation_id()
+    if not conversation_id:
+        return
+    
+    conversations = get_conversation_storage()
+    if conversation_id not in conversations:
+        return
+    
+    messages = conversations[conversation_id]['messages']
+    context_content = _get_current_context()
+    
+    # Buscar si ya existe un mensaje de contexto
+    context_message_index = None
+    for i, msg in enumerate(messages):
+        if msg.get('role') == 'system' and msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:'):
+            context_message_index = i
+            break
+    
+    if context_content and context_content.strip():
+        # Hay contexto, crear/actualizar el mensaje
+        context_message = {
+            'role': 'system',
+            'content': f'CONTEXTO DE LA CONVERSACIÓN:\n\n{context_content}',
+            'timestamp': str(uuid.uuid1().time),
+            'is_context': True  # Marcador especial para identificar este mensaje
+        }
+        
+        if context_message_index is not None:
+            # Actualizar mensaje existente
+            messages[context_message_index] = context_message
+        else:
+            # Agregar nuevo mensaje al principio (después del último mensaje del usuario)
+            _insert_context_message_before_last_user(messages, context_message)
+    else:
+        # No hay contexto, eliminar el mensaje si existe
+        if context_message_index is not None:
+            messages.pop(context_message_index)
+    
+    # Guardar cambios
+    conversations[conversation_id]['updated_at'] = str(uuid.uuid1().time)
+    app.storage.user['conversations'] = conversations
+
+def _insert_context_message_before_last_user(messages, context_message):
+    """Inserta el mensaje de contexto antes del último mensaje del usuario."""
+    # Buscar el último mensaje del usuario
+    user_indices = [i for i, msg in enumerate(messages) if msg.get('role') == 'user']
+    
+    if user_indices:
+        # Insertar antes del último mensaje del usuario
+        last_user_index = user_indices[-1]
+        messages.insert(last_user_index, context_message)
+    else:
+        # Si no hay mensajes de usuario, insertar al final
+        messages.append(context_message)
 
 @meta_tool(
     name="conversation_context_add",
@@ -58,22 +304,26 @@ def add_to_context(content: str, replace: bool = False) -> Dict[str, Any]:
         Diccionario con el resultado de la operación
     """
     try:
-        current_context = _get_current_context()
+        items = _get_context_items()
         
-        if replace or not current_context:
-            new_context = content
+        if replace:
+            # Reemplazar todo el contexto con un solo elemento
+            items = [{
+                "id": f"item-{str(uuid.uuid4())[:8]}",
+                "content": content,
+                "timestamp": str(uuid.uuid1().time)
+            }]
         else:
-            new_context = f"{current_context}\n\n{content}"
+            # Agregar como nuevo elemento
+            new_item = {
+                "id": f"item-{str(uuid.uuid4())[:8]}",
+                "content": content,
+                "timestamp": str(uuid.uuid1().time)
+            }
+            items.append(new_item)
         
-        _set_context(new_context)
+        _set_context_items(items)
         
-        # Guardar el contexto como un mensaje de sistema en la conversación actual
-        context_message = get_context_system_message()
-        if context_message:
-            from mcp_open_client.ui.chat_handlers import add_message
-            add_message('system', context_message['content'])
-        
-        # Notificar al usuario
         ui.notify(
             "Contexto de conversación actualizado",
             color='positive',
@@ -82,7 +332,7 @@ def add_to_context(content: str, replace: bool = False) -> Dict[str, Any]:
         
         return {
             "result": "Contexto actualizado correctamente",
-            "context_length": len(new_context),
+            "total_items": len(items),
             "operation": "replace" if replace else "append"
         }
     except Exception as e:
@@ -132,43 +382,67 @@ def get_context_system_message() -> Optional[Dict[str, str]]:
     Returns:
         Dict o None: Mensaje del sistema con el contexto o None si no hay contexto
     """
-    context = _get_current_context()
-    if not context or context.strip() == "":
+    items = _get_context_items()
+    if not items:
         return None
     
+    formatted_context = _format_context_for_display(items)
     return {
         "role": "system",
-        "content": f"CONTEXTO DE LA CONVERSACIÓN:\n\n{context}"
+        "content": f"CONTEXTO DE LA CONVERSACIÓN:\n\n{formatted_context}"
     }
 
 # Función para inyectar el contexto en una lista de mensajes
 def inject_context_to_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Inyecta el mensaje de contexto en la lista de mensajes justo antes del último mensaje del usuario.
-    Si no hay contexto o no hay mensajes de usuario, no hace nada.
+    El contexto ahora se maneja directamente en el historial de mensajes.
+    Esta función simplemente asegura que el contexto esté como penúltimo mensaje
+    y retorna los mensajes tal como están.
     
     Args:
         messages: Lista de mensajes de la conversación
         
     Returns:
-        List: Lista de mensajes con el contexto inyectado
+        List: Lista de mensajes (sin modificaciones, el contexto ya está en el historial)
     """
-    context_message = get_context_system_message()
-    if not context_message or not messages:
-        return messages
+    # Asegurar que el contexto esté como penúltimo mensaje
+    _ensure_context_as_penultimate()
     
-    # Crear una copia de los mensajes para no modificar el original
-    new_messages = messages.copy()
+    # Transformar mensajes de contexto JSON a texto formateado para el LLM
+    transformed_messages = []
+    for msg in messages:
+        if (msg.get('role') == 'system' and 
+            msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')):
+            # Extraer el JSON del mensaje de contexto
+            content = msg.get('content', '')
+            if content.startswith('CONTEXTO DE LA CONVERSACIÓN:\n\n'):
+                json_content = content[len('CONTEXTO DE LA CONVERSACIÓN:\n\n'):]
+                try:
+                    # Parsear JSON y formatear para mostrar
+                    parsed = json.loads(json_content)
+                    if isinstance(parsed, dict) and parsed.get("_mcp_context_format") == "elements_v1":
+                        items = parsed.get("items", [])
+                        if items:
+                            formatted_context = _format_context_for_display(items)
+                            # Crear mensaje formateado para el LLM
+                            formatted_msg = {
+                                **msg,
+                                'content': f'CONTEXTO DE LA CONVERSACIÓN:\n\n{formatted_context}'
+                            }
+                            transformed_messages.append(formatted_msg)
+                        else:
+                            transformed_messages.append(msg)
+                    else:
+                        transformed_messages.append(msg)
+                except (json.JSONDecodeError, ValueError):
+                    # Si no se puede parsear, mantener el mensaje original
+                    transformed_messages.append(msg)
+            else:
+                transformed_messages.append(msg)
+        else:
+            transformed_messages.append(msg)
     
-    # Buscar el último mensaje del usuario para insertar el contexto justo antes
-    user_indices = [i for i, msg in enumerate(new_messages) if msg.get('role') == 'user']
-    
-    if user_indices:
-        # Insertar el contexto antes del último mensaje del usuario
-        last_user_index = user_indices[-1]
-        new_messages.insert(last_user_index, context_message)
-    
-    return new_messages
+    return transformed_messages
 
 # Registrar un hook para inyectar el contexto en las conversaciones
 def register_conversation_hook():
@@ -191,3 +465,342 @@ def register_conversation_hook():
     )
     
     return {"success": True, "message": "Contexto de conversación registrado correctamente."}
+
+# Nuevas meta tools para manejar elementos del contexto
+
+@meta_tool(
+    name="conversation_context_add_item",
+    description="Agrega un nuevo elemento al contexto de la conversación",
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "Contenido del elemento a agregar al contexto"
+            },
+            "id": {
+                "type": "string",
+                "description": "ID opcional para el elemento. Si no se proporciona, se genera uno automáticamente",
+                "default": None
+            }
+        },
+        "required": ["content"]
+    }
+)
+def add_context_item(content: str, id: str = None) -> Dict[str, Any]:
+    print(f"DEBUG add_context_item called with content={content[:20]}...")
+    """
+    Agrega un nuevo elemento al contexto de la conversación.
+    
+    Args:
+        content: Contenido del elemento
+        id: ID opcional del elemento
+        
+    Returns:
+        Diccionario con el resultado de la operación
+    """
+    try:
+        items = _get_context_items()
+        
+        # Generar ID si no se proporciona
+        if not id:
+            id = f"item-{str(uuid.uuid4())[:8]}"
+        
+        # Verificar que el ID no exista
+        if any(item.get('id') == id for item in items):
+            return {"error": f"Ya existe un elemento con ID '{id}'"}
+        
+        # Agregar nuevo elemento
+        new_item = {
+            "id": id,
+            "content": content,
+            "timestamp": str(uuid.uuid1().time)
+        }
+        items.append(new_item)
+        
+        _set_context_items(items)
+        
+        ui.notify(
+            f"Elemento agregado al contexto: {id}",
+            color='positive',
+            position='bottom-right'
+        )
+        
+        return {
+            "result": f"Elemento agregado correctamente con ID '{id}'",
+            "item_id": id,
+            "total_items": len(items)
+        }
+    except Exception as e:
+        logger.error(f"Error al agregar elemento al contexto: {str(e)}")
+        return {"error": f"Error al agregar elemento: {str(e)}"}
+
+@meta_tool(
+    name="conversation_context_update_item",
+    description="Modifica un elemento específico del contexto",
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "ID del elemento a modificar"
+            },
+            "content": {
+                "type": "string",
+                "description": "Nuevo contenido para el elemento"
+            }
+        },
+        "required": ["id", "content"]
+    }
+)
+def update_context_item(id: str, content: str) -> Dict[str, Any]:
+    """
+    Modifica un elemento específico del contexto.
+    
+    Args:
+        id: ID del elemento a modificar
+        content: Nuevo contenido
+        
+    Returns:
+        Diccionario con el resultado de la operación
+    """
+    try:
+        items = _get_context_items()
+        
+        # Buscar el elemento
+        for i, item in enumerate(items):
+            if item.get('id') == id:
+                items[i]['content'] = content
+                items[i]['timestamp'] = str(uuid.uuid1().time)
+                
+                _set_context_items(items)
+                
+                ui.notify(
+                    f"Elemento del contexto actualizado: {id}",
+                    color='positive',
+                    position='bottom-right'
+                )
+                
+                return {
+                    "result": f"Elemento '{id}' actualizado correctamente",
+                    "item_id": id
+                }
+        
+        return {"error": f"No se encontró un elemento con ID '{id}'"}
+    except Exception as e:
+        logger.error(f"Error al actualizar elemento del contexto: {str(e)}")
+        return {"error": f"Error al actualizar elemento: {str(e)}"}
+
+@meta_tool(
+    name="conversation_context_remove_item",
+    description="Elimina un elemento específico del contexto",
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "ID del elemento a eliminar"
+            }
+        },
+        "required": ["id"]
+    }
+)
+def remove_context_item(id: str) -> Dict[str, Any]:
+    """
+    Elimina un elemento específico del contexto.
+    
+    Args:
+        id: ID del elemento a eliminar
+        
+    Returns:
+        Diccionario con el resultado de la operación
+    """
+    try:
+        items = _get_context_items()
+        
+        # Buscar y eliminar el elemento
+        for i, item in enumerate(items):
+            if item.get('id') == id:
+                removed_item = items.pop(i)
+                
+                _set_context_items(items)
+                
+                ui.notify(
+                    f"Elemento eliminado del contexto: {id}",
+                    color='info',
+                    position='bottom-right'
+                )
+                
+                return {
+                    "result": f"Elemento '{id}' eliminado correctamente",
+                    "removed_content": removed_item.get('content', ''),
+                    "total_items": len(items)
+                }
+        
+        return {"error": f"No se encontró un elemento con ID '{id}'"}
+    except Exception as e:
+        logger.error(f"Error al eliminar elemento del contexto: {str(e)}")
+        return {"error": f"Error al eliminar elemento: {str(e)}"}
+
+@meta_tool(
+    name="conversation_context_list_items",
+    description="Lista todos los elementos del contexto actual",
+    parameters_schema={
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+)
+def list_context_items() -> Dict[str, Any]:
+    """
+    Lista todos los elementos del contexto actual.
+    
+    Returns:
+        Diccionario con la lista de elementos
+    """
+    try:
+        items = _get_context_items()
+        
+        if not items:
+            return {
+                "result": "No hay elementos en el contexto",
+                "items": [],
+                "total_items": 0
+            }
+        
+        formatted_items = []
+        for i, item in enumerate(items, 1):
+            formatted_items.append({
+                "index": i,
+                "id": item.get('id', 'sin-id'),
+                "content": item.get('content', ''),
+                "timestamp": item.get('timestamp', '')
+            })
+        
+        return {
+            "result": f"Contexto contiene {len(items)} elemento(s)",
+            "items": formatted_items,
+            "total_items": len(items)
+        }
+    except Exception as e:
+        logger.error(f"Error al listar elementos del contexto: {str(e)}")
+        return {"error": f"Error al listar elementos: {str(e)}"}
+
+@meta_tool(
+    name="conversation_context_debug",
+    description="Herramienta de debug para ver el estado interno del contexto",
+    parameters_schema={
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+)
+def debug_context() -> Dict[str, Any]:
+    """Debug del sistema de contexto."""
+    try:
+        from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+        
+        conversation_id = get_current_conversation_id()
+        if not conversation_id:
+            return {"error": "No hay conversación activa"}
+        
+        conversations = get_conversation_storage()
+        if conversation_id not in conversations:
+            return {"error": "Conversación no encontrada"}
+        
+        messages = conversations[conversation_id]['messages']
+        
+        # Buscar mensajes de contexto
+        context_messages = []
+        for i, msg in enumerate(messages):
+            if (msg.get('role') == 'system' and 
+                msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')):
+                context_messages.append({
+                    "index": i,
+                    "content": msg.get('content', ''),
+                    "timestamp": msg.get('timestamp', ''),
+                    "is_context": msg.get('is_context', False)
+                })
+        
+        # Obtener contexto raw
+        raw_context = _get_current_context()
+        
+        # Obtener elementos parseados
+        items = _get_context_items()
+        
+        return {
+            "result": "Debug del contexto",
+            "conversation_id": conversation_id,
+            "total_messages": len(messages),
+            "context_messages_found": len(context_messages),
+            "context_messages": context_messages,
+            "raw_context_length": len(raw_context) if raw_context else 0,
+            "raw_context_preview": raw_context[:200] if raw_context else "(vacío)",
+            "parsed_items_count": len(items),
+            "parsed_items": items
+        }
+    except Exception as e:
+        logger.error(f"Error en debug del contexto: {str(e)}")
+        return {"error": f"Error en debug: {str(e)}"}
+
+@meta_tool(
+    name="conversation_context_simple_test",
+    description="Prueba simple para diagnosticar el problema del contexto",
+    parameters_schema={
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+)
+def simple_context_test() -> Dict[str, Any]:
+    """Prueba simple del contexto para diagnosticar."""
+    try:
+        # Paso 1: Verificar conversation_id
+        from mcp_open_client.ui.chat_handlers import get_conversation_storage, get_current_conversation_id
+        conversation_id = get_current_conversation_id()
+        
+        if not conversation_id:
+            return {"error": "No hay conversation_id"}
+        
+        # Paso 2: Verificar storage
+        conversations = get_conversation_storage()
+        if conversation_id not in conversations:
+            return {"error": f"Conversation {conversation_id} no existe en storage"}
+        
+        # Paso 3: Intentar crear un mensaje de contexto manualmente
+        messages = conversations[conversation_id]['messages']
+        test_message = {
+            'role': 'system',
+            'content': 'CONTEXTO DE LA CONVERSACIÓN:\n\n{"_mcp_context_format": "elements_v1", "items": [{"id": "test-123", "content": "Elemento de prueba", "timestamp": "123456789"}]}',
+            'timestamp': str(uuid.uuid1().time),
+            'is_context': True
+        }
+        
+        # Remover contexto anterior
+        messages[:] = [msg for msg in messages if not (
+            msg.get('role') == 'system' and 
+            msg.get('content', '').startswith('CONTEXTO DE LA CONVERSACIÓN:')
+        )]
+        
+        # Agregar el nuevo mensaje
+        if messages:
+            messages.insert(-1, test_message)
+        else:
+            messages.append(test_message)
+        
+        # Paso 4: Verificar que se guardó
+        context_after = _get_current_context()
+        items_after = _get_context_items()
+        
+        return {
+            "result": "Prueba completada",
+            "conversation_id": conversation_id,
+            "messages_total": len(messages),
+            "context_saved": len(context_after) > 0,
+            "context_content": context_after[:100] if context_after else "(vacío)",
+            "items_parsed": len(items_after),
+            "items_content": items_after
+        }
+    except Exception as e:
+        logger.error(f"Error en simple test: {str(e)}")
+        return {"error": f"Error: {str(e)}"}
