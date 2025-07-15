@@ -18,10 +18,8 @@ class ConversationManager:
     def refresh_chat_ui(self):
         """Refresh the chat UI - SYNC ONLY to preserve UI context"""
         if self._refresh_chat_callback:
-            print(f"🔄 CONVERSATION_MANAGER calling refresh_chat_callback (SYNC - preserves UI context)")
             # Always call as sync function to preserve UI context (NO asyncio.create_task)
             self._refresh_chat_callback()
-            print(f"✅ CONVERSATION_MANAGER refresh_chat_callback completed")
     
     def refresh_conversations_list(self):
         """Refresh the conversations list in the sidebar"""

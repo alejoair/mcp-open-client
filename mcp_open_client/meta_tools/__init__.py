@@ -11,5 +11,6 @@ from mcp_open_client.meta_tools.meta_tool import meta_tool_registry, meta_tool
 # Importar las meta tools para registrarlas automáticamente
 import mcp_open_client.meta_tools.server_control
 import mcp_open_client.meta_tools.conversation_context
+import mcp_open_client.meta_tools.ui_colors
 
 __all__ = ['meta_tool_registry', 'meta_tool']

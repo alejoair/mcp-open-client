@@ -168,7 +168,7 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
             # Cleanup conversation if needed
             conv_cleanup = history_manager.cleanup_conversation_if_needed(current_conversation_id)
             if conv_cleanup:
-                print(f"Conversation cleanup performed for {current_conversation_id}")
+                pass
         
         # Asegurar que el contexto esté como penúltimo mensaje AFTER cleanup
         from mcp_open_client.meta_tools.conversation_context import _ensure_context_as_penultimate
@@ -185,7 +185,7 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
             stats_update_callback()
         
         # Check if conversation should be auto-renamed
-        _check_auto_rename_conversation()
+        asyncio.create_task(_check_auto_rename_conversation())
 
 def find_tool_response(tool_call_id: str) -> Optional[str]:
     """Find the tool response for a given tool call ID"""
@@ -207,20 +207,22 @@ def render_message_to_ui(message: dict, message_container) -> None:
     
     with message_container:
         if role == 'user':
-            with ui.card().classes('user-message message-bubble mb-2 max-w-4xl').style('border-left: 4px solid #1e40af; background: #1e293b; padding: 8px;') as user_card:
+            with ui.card().classes('user-message message-bubble mb-2 max-w-4xl').style('border-left: 4px solid #fbbf24; background: #1e293b; padding: 8px;') as user_card:
                 parse_and_render_message(content, user_card)
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
-                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
+                    truncated_color = current_colors.get('truncated_message', '#fbbf24')
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style(f'color: {truncated_color};')
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl border-l-4 border-red-300').style('background: #374151; padding: 8px;') as bot_card:
+            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl').style('border-left: 4px solid #f87171; background: #374151; padding: 8px;') as bot_card:
                 if content:
                     parse_and_render_message(content, bot_card)
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
-                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs text-yellow-400 mt-2 italic')
+                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
                 
                 # Show tool calls if present
                 if tool_calls:
@@ -230,15 +232,25 @@ def render_message_to_ui(message: dict, message_container) -> None:
                         tool_name = function_info.get('name', 'unknown')
                         tool_args = function_info.get('arguments', '{}')
                         
+                        # Extract readable tool name (remove server prefix and convert underscores)
+                        display_name = tool_name
+                        if '_' in tool_name:
+                            # Split by underscore and take the last parts (actual tool name)
+                            parts = tool_name.split('_')
+                            if len(parts) > 2:  # Has server prefix like "mcp-requests_http_put"
+                                display_name = ' '.join(parts[1:]).replace('_', ' ').upper()
+                            else:  # Simple case like "http_put"
+                                display_name = ' '.join(parts).replace('_', ' ').upper()
+                        
                         # Find corresponding tool response
                         tool_call_id = tool_call.get('id')
                         tool_response = find_tool_response(tool_call_id) if tool_call_id else None
                         
-                        with ui.expansion(f"{tool_name}",
+                        with ui.expansion(f"{display_name}",
                                         icon=None,
-                                        value=False).classes('w-full max-w-full border-l-4 border-blue-400 overflow-hidden text-sm').props('dense header-class="text-sm font-normal"').style('max-width: 100%; box-sizing: border-box; margin: 0;'):
+                                        value=False).classes('w-full max-w-full overflow-hidden text-sm').props('dense header-class="text-sm font-normal text-warning"').style('border-left: 4px solid var(--q-tool_call_border); background: var(--q-tool_call_bg); max-width: 100%; box-sizing: border-box; margin: 0;'):
                             # Tool Call Section
-                            ui.label('Arguments:').classes('font-semibold text-blue-300')
+                            ui.label('Arguments:').classes('font-semibold').style('color: var(--q-tool_args_label);')
                             try:
                                 # Try to format JSON arguments nicely
                                 formatted_args = json.dumps(json.loads(tool_args), indent=2)
@@ -249,7 +261,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                             # Tool Response Section (if available)
                             if tool_response:
                                 ui.separator().style('margin: 0;')
-                                ui.label('Response:').classes('font-semibold text-emerald-300')
+                                ui.label('Response:').classes('font-semibold').style('color: var(--q-tool_response_label);')
                                 # Use HTML with strict width control to prevent horizontal expansion
                                 import html
                                 escaped_response = html.escape(tool_response)
@@ -300,14 +312,8 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
     global _scroll_timer
     
     try:
-        # DEBUG: Log scroll attempts
-        print(f"🔄 SCROLL ATTEMPT [WORKING VERSION]: delay={delay}, existing_timer={_scroll_timer is not None}")
-        print(f"📏 Context info: scroll_area={type(scroll_area)}, id={getattr(scroll_area, 'id', 'N/A')}")
-        print(f"🎯 Called from: WORKING message flow (new messages/LLM responses)")
-        
         # Cancel any existing scroll timer to debounce multiple calls
         if _scroll_timer is not None:
-            print(f"❌ CANCELING previous scroll timer")
             _scroll_timer.cancel()
             _scroll_timer = None
         
@@ -315,42 +321,27 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
         try:
             def do_scroll():
                 try:
-                    print(f"⬇️ EXECUTING SCROLL to bottom [WORKING VERSION] (via ui.timer)")
-                    print(f"📋 Pre-scroll state: scroll_area type={type(scroll_area)}")
-                    print(f"🎯 Context: Called from working message flow (new messages/LLM responses)")
-                    
                     # Execute the scroll
                     scroll_area.scroll_to(percent=1.0)
-                    
-                    print(f"✅ SCROLL COMPLETED [WORKING VERSION] - scroll_to(percent=1.0) executed")
-                    print(f"🏆 Post-scroll: Command sent to scroll_area successfully")
                 except Exception as e:
-                    print(f"❌ Scroll error [WORKING VERSION] (non-critical): {e}")
+                    pass
             
-            print(f"⏰ SETTING ui.timer [WORKING VERSION] with delay={delay}")
-            print(f"🕰️ Timer context: Called from working message flow")
             _scroll_timer = ui.timer(delay, do_scroll, once=True)
-            print(f"✅ Timer set successfully [WORKING VERSION]")
             
         except Exception as timer_error:
             # Fallback: Use asyncio.sleep when ui.timer fails (no UI context)
-            print(f"⚠️ ui.timer failed, using asyncio.sleep fallback: {timer_error}")
-            
             async def async_scroll():
                 try:
                     await asyncio.sleep(delay)
-                    print(f"⬇️ EXECUTING SCROLL to bottom (via asyncio.sleep)")
-                    print(f"📊 Scroll area info: {type(scroll_area)}, hasattr scroll_to: {hasattr(scroll_area, 'scroll_to')}")
                     scroll_area.scroll_to(percent=1.0)
-                    print(f"✅ SCROLL COMPLETED - scroll_to(percent=1.0) executed")
                 except Exception as e:
-                    print(f"❌ Scroll error (non-critical): {e}")
+                    pass
             
             # Execute the async scroll without blocking
             asyncio.create_task(async_scroll())
         
     except Exception as e:
-        print(f"❌ Scroll setup error (non-critical): {e}")
+        pass
 
 def render_tool_call_and_result(chat_container, tool_call, tool_result):
     """Render tool call and result in the UI"""
