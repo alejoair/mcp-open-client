@@ -265,15 +265,31 @@ Please retry with properly formatted JSON."""
                 
                 # Format the successful result for the LLM
                 if result:
-                    # MCP returns a list of content items, we'll join them
                     content_parts = []
-                    for item in result:
-                        if hasattr(item, 'text'):
-                            content_parts.append(item.text)
-                        elif isinstance(item, dict) and 'text' in item:
-                            content_parts.append(item['text'])
-                        else:
-                            content_parts.append(str(item))
+                    
+                    # Handle different result types from MCP
+                    if hasattr(result, 'content') and result.content:
+                        # CallToolResult object with content attribute
+                        content_items = result.content if isinstance(result.content, list) else [result.content]
+                        for item in content_items:
+                            if hasattr(item, 'text'):
+                                content_parts.append(item.text)
+                            elif isinstance(item, dict) and 'text' in item:
+                                content_parts.append(item['text'])
+                            else:
+                                content_parts.append(str(item))
+                    elif isinstance(result, list):
+                        # Direct list of content items
+                        for item in result:
+                            if hasattr(item, 'text'):
+                                content_parts.append(item.text)
+                            elif isinstance(item, dict) and 'text' in item:
+                                content_parts.append(item['text'])
+                            else:
+                                content_parts.append(str(item))
+                    else:
+                        # Fallback for other result types
+                        content_parts.append(str(result))
                     
                     content = "\n".join(content_parts) if content_parts else "Tool executed successfully"
                 else:
