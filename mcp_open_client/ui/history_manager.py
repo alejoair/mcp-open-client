@@ -82,29 +82,53 @@ class HistoryManager:
         
         # If we need to clean up based on message count
         if message_cleanup_needed:
-            # Simple rolling window: keep the last max_messages
-            messages_to_remove = original_count - self.max_messages
-            kept_messages = messages[messages_to_remove:]
-            conversations[conversation_id]['messages'] = kept_messages
+            # Separate context messages from regular messages
+            context_messages = [msg for msg in messages if msg.get('is_context', False)]
+            regular_messages = [msg for msg in messages if not msg.get('is_context', False)]
             
-            print(f"Rolling window: removed {messages_to_remove} messages, kept {len(kept_messages)} (target: {self.max_messages})")
+            # Only count regular messages for the limit
+            regular_count = len(regular_messages)
+            if regular_count > self.max_messages:
+                # Simple rolling window: keep the last max_messages of regular messages
+                messages_to_remove = regular_count - self.max_messages
+                kept_regular_messages = regular_messages[messages_to_remove:]
+                
+                # Combine context messages with kept regular messages
+                kept_messages = context_messages + kept_regular_messages
+                
+                print(f"Rolling window: removed {messages_to_remove} messages, kept {len(kept_messages)} (target: {self.max_messages})")
+                print(f"Preserved {len(context_messages)} context messages")
+            else:
+                kept_messages = messages  # No cleanup needed
+                print(f"No rolling window cleanup needed: {regular_count} regular messages (limit: {self.max_messages})")
+                print(f"Preserved {len(context_messages)} context messages")
+            
+            conversations[conversation_id]['messages'] = kept_messages
         
         # If we need to clean up based on token count
         elif token_cleanup_needed:
-            # Remove oldest messages until we're under the token limit
-            # Start by removing 25% of the messages
-            messages_to_remove = max(1, int(original_count * 0.25))
-            kept_messages = messages[messages_to_remove:]
+            # Separate context messages from regular messages
+            context_messages = [msg for msg in messages if msg.get('is_context', False)]
+            regular_messages = [msg for msg in messages if not msg.get('is_context', False)]
+            
+            # Remove oldest regular messages until we're under the token limit
+            # Start by removing 25% of the regular messages
+            regular_count = len(regular_messages)
+            messages_to_remove = max(1, int(regular_count * 0.25))
+            kept_regular_messages = regular_messages[messages_to_remove:]
+            
+            # Combine context messages with kept regular messages
+            kept_messages = context_messages + kept_regular_messages
             conversations[conversation_id]['messages'] = kept_messages
             
             print(f"Token limit cleanup: removed {messages_to_remove} oldest messages to reduce token count")
             print(f"Token count was {conv_stats['total_tokens']}, limit is {max_tokens}")
+            print(f"Preserved {len(context_messages)} context messages")
         
         # Save to storage
         from nicegui import app
         app.storage.user['conversations'] = conversations
-        
-        print(f"Conversation cleanup performed for {conversation_id}")
+
         return True
     
 

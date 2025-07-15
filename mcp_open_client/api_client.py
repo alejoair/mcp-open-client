@@ -45,7 +45,7 @@ class APIClient:
         self.model = user_settings.get('model')
         self.system_prompt = user_settings.get('system_prompt', 'You are a helpful assistant.')
         
-        logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}, API Key: {'[SET]' if self.api_key else '[NOT SET]'}, System Prompt: {'[SET]' if self.system_prompt else '[DEFAULT]'}")
+        logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}")
         
         # Validate that we have the minimum required settings
         if not self.base_url or not self.model:
@@ -79,7 +79,7 @@ class APIClient:
             logger.info("Fetching available models")
             response = await self._client.models.list()
             models = response.data
-            logger.info(f"Retrieved {len(models)} models")
+
             return [model.model_dump() for model in models]
         except openai.OpenAIError as e:
             error_msg = f"Error listing models: {str(e)}"
@@ -137,7 +137,7 @@ class APIClient:
         try:
             model_to_use = model or self.model
             system_prompt_to_use = system_prompt or self.system_prompt
-            logger.info(f"Creating chat completion with model: {model_to_use}")
+            logger.info(f"Creating chat completion")
             
             # Prepare messages with system prompt if provided
             prepared_messages = messages.copy()
@@ -179,9 +179,31 @@ class APIClient:
             return response.model_dump()
             
         except openai.OpenAIError as e:
-            error_msg = f"OpenAI API error in chat completion: {str(e)}"
-            logger.error(error_msg)
-            raise APIClientError(error_msg) from e
+            error_str = str(e)
+            # Handle LM Studio grammar stack error specifically
+            if "empty grammar stack" in error_str.lower() or "prediction-error" in error_str.lower():
+                # Try fallback without tools if this was a tool call
+                if 'tools' in kwargs or 'tool_choice' in kwargs:
+                    logger.warning("Grammar stack error detected, retrying without tools")
+                    fallback_params = params.copy()
+                    fallback_params.pop('tools', None)
+                    fallback_params.pop('tool_choice', None) 
+                    try:
+                        response = await self._client.chat.completions.create(**fallback_params)
+                        logger.info("Fallback without tools successful")
+                        return response.model_dump()
+                    except Exception as fallback_e:
+                        error_msg = f"LM Studio grammar error and fallback failed: {str(fallback_e)}"
+                        logger.error(error_msg)
+                        raise APIClientError(error_msg) from fallback_e
+                else:
+                    error_msg = f"LM Studio grammar stack error: {error_str}"
+                    logger.error(error_msg)
+                    raise APIClientError(error_msg) from e
+            else:
+                error_msg = f"OpenAI API error in chat completion: {error_str}"
+                logger.error(error_msg)
+                raise APIClientError(error_msg) from e
         except Exception as e:
             error_msg = f"Unexpected error in chat completion: {str(e)}"
             logger.error(error_msg)

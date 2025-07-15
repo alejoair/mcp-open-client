@@ -3,10 +3,42 @@ import json
 from typing import Optional, List, Dict, Any
 from nicegui import ui, app
 from .message_parser import parse_and_render_message
+from .message_validator import validate_tool_call_sequence
 from .history_manager import history_manager
 from mcp_open_client.meta_tools.conversation_context import inject_context_to_messages, get_context_system_message
 import asyncio
 import json
+
+def _final_tool_sequence_validation(messages, force_cleanup=False):
+    """Final validation for tool sequences with optional force cleanup"""
+    return validate_tool_call_sequence(messages)
+
+def _rebuild_conversation_from_cleaned_messages(cleaned_messages):
+    """Rebuild conversation storage from cleaned messages"""
+    if not current_conversation_id:
+        return
+    
+    conversations = get_conversation_storage()
+    if current_conversation_id in conversations:
+        # Convert cleaned API messages back to storage format
+        storage_messages = []
+        for msg in cleaned_messages:
+            storage_msg = {
+                'role': msg['role'],
+                'content': msg['content'],
+                'timestamp': str(uuid.uuid1().time)
+            }
+            
+            if 'tool_calls' in msg:
+                storage_msg['tool_calls'] = msg['tool_calls']
+            if 'tool_call_id' in msg:
+                storage_msg['tool_call_id'] = msg['tool_call_id']
+                
+            storage_messages.append(storage_msg)
+        
+        conversations[current_conversation_id]['messages'] = storage_messages
+        conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
+        app.storage.user['conversations'] = conversations
 
 # Global variables
 current_conversation_id: Optional[str] = None
@@ -123,25 +155,27 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         
         # Only add message if it passed validation (not None)
         if processed_message is not None:
-            print(f"Message processed: original size: {len(json.dumps(message))}, processed size: {len(json.dumps(processed_message))}")
+            
             conversations[current_conversation_id]['messages'].append(processed_message)
         else:
-            print(f"Warning: Message was rejected during validation and not stored: {role} - {content[:50]}...")
+            
             return  # Exit early if message was rejected
         conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
         app.storage.user['conversations'] = conversations
         
-        # Log conversation size with accurate token count from tiktoken
-        conv_size = history_manager.get_conversation_size(current_conversation_id)
-        print(f"Conversation {current_conversation_id} size: {conv_size['total_tokens']} tokens, {conv_size['message_count']} messages")
-        print(f"Token counting method: {history_manager.settings.get('token_counting_method', 'heuristic')}")
-        
-        # Check if conversation or total history needs cleanup
+        # Check if conversation or total history needs cleanup BEFORE ensuring context position
         if history_manager.settings['auto_cleanup']:
             # Cleanup conversation if needed
             conv_cleanup = history_manager.cleanup_conversation_if_needed(current_conversation_id)
             if conv_cleanup:
                 print(f"Conversation cleanup performed for {current_conversation_id}")
+        
+        # Asegurar que el contexto esté como penúltimo mensaje AFTER cleanup
+        from mcp_open_client.meta_tools.conversation_context import _ensure_context_as_penultimate
+        _ensure_context_as_penultimate()
+        
+        # Log conversation size with accurate token count from tiktoken
+        conv_size = history_manager.get_conversation_size(current_conversation_id)
             
             # Note: Global history cleanup disabled - only per-conversation limits apply
         
@@ -520,8 +554,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             fallback_messages.append(fallback_msg)
                         else:
                             fallback_messages.append(msg)
-                    
-                    print(f"Retrying with {len(fallback_messages)} cleaned messages (removed tool calls)")
+            
                     
                     try:
                         # Validate fallback messages but preserve any remaining tool calls
@@ -561,7 +594,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         tool_results.append(tool_result)
                         
                         # Add tool result to conversation storage
-                        print(f"DEBUG: Adding tool result to conversation - tool_call_id: {tool_result['tool_call_id']}, content length: {len(tool_result['content'])}")
                         add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
                         
                         # Verify the tool result was added correctly
@@ -570,11 +602,10 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         for msg in messages_after_add:
                             if msg.get('role') == 'tool' and msg.get('tool_call_id') == tool_result['tool_call_id']:
                                 tool_msg_found = True
-                                print(f"DEBUG: Tool result verified in conversation - tool_call_id: {msg.get('tool_call_id')}")
+                                
                                 break
                         if not tool_msg_found:
-                            print(f"ERROR: Tool result not found in conversation after add_message - tool_call_id: {tool_result['tool_call_id']}")
-                        
+                            pass
                         # Update UI immediately after each tool result
                         message_container.clear()
                         render_messages(message_container)
@@ -590,7 +621,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         tool_results.append(error_result)
                         
                         # Add error result to conversation storage
-                        print(f"DEBUG: Adding tool error to conversation - tool_call_id: {tool_call['id']}, error: {error_message}")
+                        
                         add_message('tool', error_message, tool_call_id=tool_call['id'])
                         
                         # Verify the tool error was added correctly
@@ -599,10 +630,10 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         for msg in messages_after_error:
                             if msg.get('role') == 'tool' and msg.get('tool_call_id') == tool_call['id']:
                                 tool_error_found = True
-                                print(f"DEBUG: Tool error verified in conversation - tool_call_id: {msg.get('tool_call_id')}")
+                                
                                 break
                         if not tool_error_found:
-                            print(f"ERROR: Tool error not found in conversation after add_message - tool_call_id: {tool_call['id']}")
+                            pass
                         
                         # Update UI immediately after error
                         message_container.clear()
@@ -644,7 +675,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         
                         # If orphaned tool calls were found, update the conversation
                         if len(cleaned_messages) != len(api_messages):
-                            print(f"Cleaned up orphaned tool calls: {len(api_messages)} -> {len(cleaned_messages)} messages")
+                            
                             # Rebuild conversation from cleaned messages
                             _rebuild_conversation_from_cleaned_messages(cleaned_messages)
                         
@@ -652,8 +683,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         
                     # Rebuild api_messages from updated conversation for next API call
                     conversation_messages = get_messages()
-                    print(f"DEBUG: Rebuilding api_messages from {len(conversation_messages)} conversation messages")
                     
+        
                     api_messages = []
                     for i, msg in enumerate(conversation_messages):
                         api_msg = {
@@ -664,21 +695,20 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         # Include tool_calls for assistant messages
                         if msg["role"] == "assistant" and "tool_calls" in msg:
                             api_msg["tool_calls"] = msg["tool_calls"]
-                            print(f"DEBUG: Message {i} - Assistant with {len(msg['tool_calls'])} tool calls")
+     
                         
                         # Include tool_call_id for tool messages
                         if msg["role"] == "tool" and "tool_call_id" in msg:
                             api_msg["tool_call_id"] = msg["tool_call_id"]
-                            print(f"DEBUG: Message {i} - Tool result with tool_call_id: {msg['tool_call_id']}")
-                        
+                       
                         api_messages.append(api_msg)
                     
-                    print(f"DEBUG: Built {len(api_messages)} api_messages before validation")
+                    
                     
                     # Clean orphaned tools before API call
                     api_messages = clean_orphaned_tools(get_messages())
                     
-                    print(f"DEBUG: After cleaning: {len(api_messages)} api_messages")
+                    
                     
                     # Check again before making API call
                     if stop_generation:
@@ -686,7 +716,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         # Clean up any orphaned tool calls before breaking (STOP PRESSED)
                         cleaned_messages = _final_tool_sequence_validation(api_messages, force_cleanup=True)
                         if len(cleaned_messages) != len(api_messages):
-                            print(f"Cleaned up orphaned tool calls before API call: {len(api_messages)} -> {len(cleaned_messages)} messages")
+                            
                             _rebuild_conversation_from_cleaned_messages(cleaned_messages)
                         break
                     
@@ -735,7 +765,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                 break
                             
                             # Execute tool calls if present
-                            print(f"DEBUG: Processing {len(tool_calls)} tool calls in loop")
+                           
                             tool_results = []
                             for tool_call in tool_calls:
                                 try:
@@ -743,7 +773,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                     tool_results.append(tool_result)
                                     
                                     # Add tool result to conversation storage
-                                    print(f"DEBUG: Adding tool result to conversation - tool_call_id: {tool_result['tool_call_id']}, content length: {len(tool_result['content'])}")
                                     add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
                                     
                                     # Update UI immediately after each tool result
@@ -762,7 +791,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                     tool_results.append(error_result)
                                     
                                     # Add error result to conversation storage
-                                    print(f"DEBUG: Adding tool error to conversation - tool_call_id: {tool_call['id']}, error: {error_message}")
                                     add_message('tool', error_message, tool_call_id=tool_call['id'])
                                     
                                     # Update UI immediately after error
@@ -778,7 +806,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                 
                         else:
                             print("No valid response received")
-                            print(f"Response structure: {response}")
+                            
                             break
                             
                     except Exception as api_error:
@@ -808,7 +836,6 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
                else:
                    print("No valid response received from first API call")
-                   print(f"Response structure: {response}")
        
         except Exception as e:
             # Remove spinner on error
