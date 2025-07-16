@@ -37,59 +37,30 @@ class ConversationTitleManager:
         max_length = max_length or self.max_title_length
         
         try:
-            # Filter out system messages and tool calls for title generation
             user_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant']]
             
             if not user_messages:
                 return "New Conversation"
             
-            # Take first few messages for title generation (max 6 messages)
             sample_messages = user_messages[:6]
             
-            # Create a prompt for title generation
-            title_prompt = [
-                {
-                    "role": "system",
-                    "content": f"You are a helpful assistant that generates concise, descriptive titles for conversations. Generate a title that captures the main topic or purpose of the conversation. The title must be {max_length} characters or less, descriptive, and professional. Return ONLY the title, nothing else."
-                }
-            ]
-            
-            # Add sample messages
-            for msg in sample_messages:
-                if msg.get('content'):
-                    title_prompt.append({
-                        "role": msg['role'],
-                        "content": msg['content'][:200]  # Truncate long messages
-                    })
-            
-            # Add final instruction
-            title_prompt.append({
-                "role": "user",
-                "content": f"Based on this conversation, generate a concise title ({max_length} characters max). Return only the title."
-            })
-            
-            # Generate title using chat completion
             response = await self.api_client.chat_completion(
-                messages=title_prompt,
-                temperature=0.3,  # Lower temperature for more consistent titles
-                max_tokens=20,    # Short response for title
-                system_prompt=None  # Already included in messages
+                messages=[{
+                    "role": "user",
+                    "content": f"Generate a short title for this conversation. First message: {sample_messages[0].get('content', '')[:100] if sample_messages else ''}"
+                }]
             )
             
-            # Extract title from response
             if response and 'choices' in response and response['choices']:
                 title = response['choices'][0]['message']['content'].strip()
                 
-                # Clean up the title
                 title = title.strip('"\'.\\/').strip()
                 
-                # Remove common prefixes/suffixes
                 prefixes_to_remove = ["Title:", "title:", "TITLE:", "Conversation:", "conversation:"]
                 for prefix in prefixes_to_remove:
                     if title.startswith(prefix):
                         title = title[len(prefix):].strip()
                 
-                # Ensure title length
                 if len(title) > max_length:
                     title = title[:max_length-3] + "..."
                 
@@ -97,9 +68,7 @@ class ConversationTitleManager:
             
             return "Conversation"
             
-        except Exception as e:
-            logger.warning(f"Failed to generate conversation title: {str(e)}")
-            # Return a fallback title
+        except Exception:
             return "Conversation"
     
     def should_auto_rename(self, messages: List[Dict[str, Any]]) -> bool:
@@ -111,11 +80,8 @@ class ConversationTitleManager:
         Returns:
             True if the conversation should be auto-renamed
         """
-        # Filter out system messages and tool calls
         user_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant']]
-        
-        # Auto-rename when we reach the trigger count
-        return len(user_messages) == self.trigger_message_count
+        return len(user_messages) >= self.trigger_message_count
     
     def validate_title(self, title: str, max_length: Optional[int] = None) -> str:
         """Validate and clean up a conversation title.

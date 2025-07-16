@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, List, Optional, Union, Callable
 from fastmcp import Client
@@ -7,6 +8,8 @@ from fastmcp.exceptions import McpError, ClientError
 import mcp.types
 import traceback
 from .termux_workaround import apply_termux_workaround, setup_termux_environment, is_termux, is_android
+
+logger = logging.getLogger(__name__)
 
 # Type alias for progress handler
 ProgressHandler = Callable[[float, str], None]
@@ -46,13 +49,12 @@ class MCPClientManager:
             
             # Create a new client with the current configuration
             if "mcpServers" in config and config["mcpServers"]:
-                # Filter out disabled servers and remove 'disabled' field from server configs
+                # Use all configured servers (no disabled filtering)
                 active_servers = {}
                 for name, server_config in config["mcpServers"].items():
-                    if not server_config.get("disabled", False):
-                        # Create a clean copy without the 'disabled' field
-                        clean_config = {k: v for k, v in server_config.items() if k != "disabled"}
-                        active_servers[name] = clean_config
+                    # Create a clean copy without any 'disabled' field
+                    clean_config = {k: v for k, v in server_config.items() if k != "disabled"}
+                    active_servers[name] = clean_config
                 
                 if active_servers:
                     self.active_servers = active_servers

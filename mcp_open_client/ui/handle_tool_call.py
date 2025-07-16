@@ -1,10 +1,7 @@
 import json
-import logging
 from typing import Dict, Any, List
 from mcp_open_client.mcp_client import mcp_client_manager
 from mcp_open_client.meta_tools import meta_tool_registry
-
-logger = logging.getLogger(__name__)
 
 def attempt_json_repair(json_str: str) -> tuple[dict, bool]:
     """
@@ -112,14 +109,12 @@ def validate_and_clean_arguments(arguments: dict, tool_name: str) -> dict:
         Cleaned arguments dictionary
     """
     if not isinstance(arguments, dict):
-        logger.warning(f"Tool '{tool_name}' arguments are not a dictionary: {type(arguments)}")
         return {}
     
     cleaned = {}
     for key, value in arguments.items():
         # Ensure keys are strings
         if not isinstance(key, str):
-            logger.warning(f"Tool '{tool_name}' has non-string key: {key} ({type(key)})")
             key = str(key)
         
         # Clean up common value issues
@@ -150,7 +145,7 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         Tool call result in OpenAI format
     """
     try:
-        logger.info(f"Handling tool call: {tool_call}")
+        pass
 
         # Extract tool information
         tool_call_id = tool_call.get("id")
@@ -160,7 +155,6 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         
         if not tool_name:
             error_msg = "Tool name not found in tool call"
-            logger.error(error_msg)
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
@@ -175,13 +169,11 @@ async def handle_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             arguments, was_repaired = attempt_json_repair(arguments_str)
             
             if was_repaired:
-                logger.warning(f"Successfully repaired malformed JSON for tool '{tool_name}'")
+                pass
               
             else:
                 # Repair failed, return detailed error to LLM
                 error_msg = f"Invalid JSON in tool arguments: {e}"
-                logger.error(f"JSON parsing failed for tool '{tool_name}': {error_msg}")
-                logger.error(f"Raw arguments string: {repr(arguments_str)}")
                 
                 # Provide more helpful error message to LLM
                 detailed_error = f"""JSON parsing error in tool arguments for '{tool_name}': {e}
@@ -218,7 +210,6 @@ Please retry with properly formatted JSON."""
                     if 'error' in result:
                         # Handle meta tool error
                         error_msg = result['error']
-                        logger.error(f"Meta tool call failed: {tool_name} - {error_msg}")
                         return {
                             "tool_call_id": tool_call_id,
                             "role": "tool",
@@ -234,9 +225,32 @@ Please retry with properly formatted JSON."""
                     # Default success message
                     content = "Meta tool executed successfully (no output)"
                     
-                logger.info(f"Meta tool call successful: {tool_name}")
             else:
                 # It's a regular MCP tool
+                from mcp_open_client.config_utils import is_tool_enabled
+                
+                # MISMA LÓGICA QUE get_available_tools: Extraer servidor del nombre de la tool
+                # El tool_name aquí es el nombre completo (ej: "mcp-requests_http_get")
+                if '_' in tool_name:
+                    # Buscar el primer _ para separar servidor del resto
+                    parts = tool_name.split('_', 1)
+                    server_name = parts[0]
+                    actual_tool_name = parts[1]
+                else:
+                    # Si no tiene _, asumir que no tiene prefijo de servidor
+                    server_name = 'unknown'
+                    actual_tool_name = tool_name
+                
+                # Construir tool_id usando el mismo formato que get_available_tools
+                tool_id = f"{server_name}:{actual_tool_name}"
+                
+                # Verificar si la tool está habilitada
+                if not is_tool_enabled(tool_id, 'mcp'):
+                    return {
+                        "tool_call_id": tool_call_id,
+                        "role": "tool",
+                        "content": f"MCP Tool '{tool_name}' is disabled"
+                    }
                 
                 result = await mcp_client_manager.call_tool(tool_name, arguments)
                 
@@ -256,7 +270,6 @@ Please retry with properly formatted JSON."""
                             detailed_error += f"\nTool: {operation_info.get('name', tool_name)}"
                             detailed_error += f"\nArguments: {operation_info.get('params', arguments)}"
                     
-                    logger.error(f"MCP tool call failed: {tool_name} - {error_msg}")
                     return {
                         "tool_call_id": tool_call_id,
                         "role": "tool",
@@ -295,7 +308,6 @@ Please retry with properly formatted JSON."""
                 else:
                     content = "Tool executed successfully (no output)"
                 
-                logger.info(f"MCP tool call successful: {tool_name}")
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
@@ -304,7 +316,6 @@ Please retry with properly formatted JSON."""
             
         except Exception as e:
             error_msg = f"Error executing MCP tool '{tool_name}': {str(e)}"
-            logger.error(error_msg)
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
@@ -313,7 +324,6 @@ Please retry with properly formatted JSON."""
             
     except Exception as e:
         error_msg = f"Unexpected error in handle_tool_call: {str(e)}"
-        logger.error(error_msg)
         return {
             "tool_call_id": tool_call.get("id", "unknown"),
             "role": "tool",
@@ -328,46 +338,61 @@ async def get_available_tools() -> List[Dict[str, Any]]:
         List of tool definitions in OpenAI format, including both MCP tools and meta tools
     """
     try:
-        logger.info("Getting available MCP tools")
-       
-        
         # Check if MCP client is connected
         if not mcp_client_manager.is_connected():
-
-            logger.warning("MCP client is not connected")
             return []
-        
-       
         
         # Get tools from MCP client manager
         mcp_tools = await mcp_client_manager.list_tools()
- 
+        
         if not mcp_tools:
-            logger.info("No MCP tools available")
             return []
         
-        # Convert MCP tools to OpenAI format
+        # Convert MCP tools to OpenAI format and filter by configuration
+        from mcp_open_client.config_utils import is_tool_enabled
+        
         openai_tools = []
+        active_servers = mcp_client_manager.get_active_servers()
+        
         for tool in mcp_tools:
             try:
                 # MCP tool format to OpenAI tool format
                 # Handle both dict and object formats
                 if hasattr(tool, 'name'):
                     # FastMCP Tool object
-                    name = tool.name
+                    full_tool_name = tool.name
                     description = tool.description
                     input_schema = tool.inputSchema
                     
                 else:
                     # Dict format
-                    name = tool.get("name", "")
+                    full_tool_name = tool.get("name", "")
                     description = tool.get("description", "")
                     input_schema = tool.get("inputSchema")
+                
+                # MISMA LÓGICA QUE mcp_servers.py: Extraer servidor y nombre real de la tool
+                # Formato: "servidor_nombre_tool" -> servidor="servidor", tool="nombre_tool"
+                if '_' in full_tool_name:
+                    # Buscar el primer _ para separar servidor del resto
+                    parts = full_tool_name.split('_', 1)
+                    server_name = parts[0]
+                    actual_tool_name = parts[1]
+                else:
+                    # Si no tiene _, asumir que no tiene prefijo de servidor
+                    server_name = 'unknown'
+                    actual_tool_name = full_tool_name
+                
+                # Construir tool_id usando el mismo formato que mcp_servers.py
+                tool_id = f"{server_name}:{actual_tool_name}"
+                
+                # Verificar si la tool está habilitada
+                if not is_tool_enabled(tool_id, 'mcp'):
+                    continue
                     
                 openai_tool = {
                     "type": "function",
                     "function": {
-                        "name": name,
+                        "name": full_tool_name,  # Usar el nombre completo para el LLM
                         "description": description,
                     }
                 }
@@ -385,27 +410,20 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                 
                 openai_tools.append(openai_tool)
                 
-                
-                
             except Exception as e:
-                logger.warning(f"Error converting tool {tool}: {e}")
                 continue
         
         # Add meta tools to the list
         try:
             meta_tools = meta_tool_registry.get_tools_schema()
             if meta_tools:
-                
                 openai_tools.extend(meta_tools)
         except Exception as e:
-            logger.error(f"Error getting meta tools: {e}")
-   
-        
-        logger.info(f"Available tools: {len(openai_tools)} total (MCP + meta tools)")
+            pass
         return openai_tools
         
     except Exception as e:
-        logger.error(f"Error getting available tools: {e}")
+        pass
         return []
 
 def is_tool_call_response(response: Dict[str, Any]) -> bool:
@@ -429,7 +447,7 @@ def is_tool_call_response(response: Dict[str, Any]) -> bool:
         return tool_calls is not None and len(tool_calls) > 0
         
     except Exception as e:
-        logger.error(f"Error checking for tool calls: {e}")
+        pass
         return False
 
 def extract_tool_calls(response: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -453,5 +471,5 @@ def extract_tool_calls(response: Dict[str, Any]) -> List[Dict[str, Any]]:
         return tool_calls
         
     except Exception as e:
-        logger.error(f"Error extracting tool calls: {e}")
+        pass
         return []

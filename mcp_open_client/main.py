@@ -148,7 +148,8 @@ def create_conversations_section():
     
         # Conversations list container - store reference globally for updates
         global conversations_container
-        conversations_container = ui.column().classes('w-full')
+        with ui.scroll_area().classes('w-full h-64') as scroll_area:
+            conversations_container = ui.column().classes('w-full')
         populate_conversations_list(conversations_container)
         
         return conversations_container
@@ -189,8 +190,8 @@ def populate_conversations_list(container):
             reverse=True
         )
         
-        # Show only the 5 most recent conversations in sidebar
-        for conv_id, conv_data in sorted_conversations[:5]:
+        # Show all conversations
+        for conv_id, conv_data in sorted_conversations:
             title = conv_data.get('title', f'Chat {conv_id[:8]}')
             message_count = len(conv_data.get('messages', []))
             
@@ -444,7 +445,7 @@ favicon_svg = '''
 ui.run(
     title="MCP Open Client",
     storage_secret="ultrasecretkeyboard",
-    port=8090,
+    port=8091,
     reload=False,
     dark=True,
     show_welcome_message=True,

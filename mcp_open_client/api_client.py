@@ -31,6 +31,7 @@ class APIClient:
         self.system_prompt = None
         self.max_retries = max_retries
         self.timeout = timeout
+        self.default_max_tokens = 4000
         self._client = None
         self._load_user_settings()
         self._initialize_client()
@@ -44,6 +45,10 @@ class APIClient:
         self.api_key = user_settings.get('api_key')
         self.model = user_settings.get('model')
         self.system_prompt = user_settings.get('system_prompt', 'You are a helpful assistant.')
+        # Override default_max_tokens if specified in user settings
+        user_max_tokens = user_settings.get('max_tokens')
+        if user_max_tokens:
+            self.default_max_tokens = user_max_tokens
         
         logger.info(f"Loaded user settings - Base URL: {self.base_url}, Model: {self.model}")
         
@@ -154,7 +159,7 @@ class APIClient:
                 "temperature": temperature,
                 "stream": stream,
                 **{k: v for k, v in {
-                    "max_tokens": max_tokens,
+                    "max_tokens": max_tokens or self.default_max_tokens,
                     "top_p": top_p,
                     "frequency_penalty": frequency_penalty,
                     "presence_penalty": presence_penalty,
