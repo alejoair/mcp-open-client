@@ -23,9 +23,13 @@ class ConversationManager:
     
     def refresh_conversations_list(self):
         """Refresh the conversations list in the sidebar"""
+        print(f"Debug: refresh_conversations_list called, container exists: {self._conversations_container is not None}")
         if self._conversations_container:
+            print("Debug: Clearing and repopulating conversations list")
             self._conversations_container.clear()
             self._populate_conversations_list()
+        else:
+            print("Debug: No conversations container found, cannot refresh")
     
     def _populate_conversations_list(self):
         """Populate the conversations list"""

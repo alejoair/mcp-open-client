@@ -894,9 +894,14 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             # Update stats after completion
             if stats_update_callback:
                 stats_update_callback()
+            
+            # Check for auto-rename after successful completion
+            try:
+                await _check_auto_rename_conversation()
+            except Exception as rename_error:
+                print(f"Auto-rename error: {rename_error}")
  
 
-# Auto-rename conversation functionality
 async def _check_auto_rename_conversation():
     """Check if current conversation should be auto-renamed and perform the rename."""
     global current_conversation_id
@@ -905,7 +910,6 @@ async def _check_auto_rename_conversation():
         return
     
     try:
-        # Import here to avoid circular imports
         from .conversation_title_manager import get_title_manager
         
         conversations = get_conversation_storage()
@@ -915,31 +919,27 @@ async def _check_auto_rename_conversation():
         conversation = conversations[current_conversation_id]
         messages = conversation.get('messages', [])
         
-        # Get title manager instance
         title_manager = get_title_manager()
+        should_rename = title_manager.should_auto_rename(messages)
         
-        # Check if conversation should be auto-renamed
-        if title_manager.should_auto_rename(messages):
-            # Check if title is still the default one
+        if should_rename:
             current_title = conversation.get('title', '')
-            if current_title.startswith('Conversation '):
-                # Generate new title
+            
+            if current_title.startswith('Conversation'):
                 new_title = await title_manager.generate_conversation_title(messages)
                 
-                # Update conversation title
                 conversations[current_conversation_id]['title'] = new_title
                 conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
                 app.storage.user['conversations'] = conversations
                 
-                # Refresh conversations list in UI to show new title
-                from .conversation_manager import conversation_manager
-                conversation_manager.refresh_conversations_list()
-                
-                print(f"Auto-renamed conversation to: '{new_title}'")
+                try:
+                    from ..main import refresh_conversations_list
+                    refresh_conversations_list()
+                except Exception:
+                    pass
     
-    except Exception as e:
-        print(f"Error in auto-rename: {str(e)}")
-        # Don't raise exception to avoid breaking the main flow
+    except Exception:
+        pass
 
 
 def rename_conversation(conversation_id: str, new_title: str) -> bool:
