@@ -32,51 +32,180 @@ def show_content(container):
             with ui.row().classes('w-full gap-4'):
                 ui.button('Agregar Servidor', icon='add', on_click=lambda: show_add_dialog()).props('color=primary')
                 ui.button('Restaurar por Defecto', icon='refresh', on_click=lambda: reset_to_default()).props('color=warning')
+                
+                def reset_tools_config():
+                    from mcp_open_client.config_utils import reset_tools_config as reset_config
+                    reset_config()
+                    ui.notify('Configuración de tools restablecida - todas las tools están habilitadas', color='positive')
+                    # No necesitamos refresh aquí porque las funciones de toggle ya manejan el estado
+                
+                ui.button('Resetear Tools', icon='settings_backup_restore', on_click=lambda: reset_tools_config()).props('color=secondary').tooltip('Habilitar todas las tools individuales')
         
         # Status overview card
         with ui.card().classes('w-full mb-6'):
             ui.label('Estado Actual').classes('text-lg font-semibold mb-3')
             
             if servers:
-                active_count = sum(1 for config in servers.values() if not config.get('disabled', False))
                 total_count = len(servers)
                 ui.label(f'Servidores configurados: {total_count}').classes('text-sm text-gray-600')
-                ui.label(f'Servidores activos: {active_count}').classes('text-sm text-gray-600')
-                
-                if active_count > 0:
-                    ui.linear_progress(active_count / total_count).classes('w-full mt-2')
-                    ui.label(f'{(active_count/total_count)*100:.0f}% de servidores activos').classes('text-sm text-gray-600')
+                ui.label('Gestiona herramientas individuales en las secciones de abajo.').classes('text-sm text-gray-600')
             else:
                 ui.label('No hay servidores configurados').classes('text-sm text-gray-600')
         
         # Meta Tools List Card
         with ui.card().classes('w-full mb-6'):
             ui.label('Meta Tools Disponibles').classes('text-lg font-semibold mb-3')
-            ui.label('Lista de todas las herramientas que el LLM puede usar para interactuar con el sistema.').classes('text-sm text-gray-600 mb-2')
+            ui.label('Activa o desactiva herramientas individuales que el LLM puede usar para interactuar con el sistema.').classes('text-sm text-gray-600 mb-2')
             
             # Obtener todas las meta tools disponibles
             from mcp_open_client.meta_tools import meta_tool_registry
+            from mcp_open_client.config_utils import is_tool_enabled, set_tool_enabled
             
-            # Mostrar lista de meta tools en formato más compatible
+            # Mostrar lista de meta tools con switches
             if meta_tool_registry.tools:
-                # Crear una tabla manual con divs en lugar de ui.table()
+                # Crear una tabla manual con divs
                 with ui.element('div').classes('w-full border rounded').style('max-height: 300px; overflow-y: auto;'):
                     # Encabezados
                     with ui.element('div').classes('bg-primary text-white flex'):
+                        with ui.element('div').classes('p-2 w-16'):
+                            ui.label('Estado')
                         with ui.element('div').classes('p-2 w-1/3'):
                             ui.label('Nombre')
-                        with ui.element('div').classes('p-2 w-2/3'):
+                        with ui.element('div').classes('p-2 w-1/2'):
                             ui.label('Descripción')
                     
-                    # Filas
+                    # Filas con switches
                     for name, schema in meta_tool_registry.tool_schemas.items():
-                        with ui.element('div').classes('flex border-b hover:bg-gray-100'):
+                        with ui.element('div').classes('flex border-b hover:bg-gray-100 items-center'):
+                            with ui.element('div').classes('p-2 w-16'):
+                                def toggle_meta_tool(enabled, tool_name=name):
+                                    set_tool_enabled(tool_name, enabled, 'meta')
+                                    ui.notify(f"Meta tool '{tool_name}' {'habilitada' if enabled else 'deshabilitada'}", color='positive')
+                                
+                                ui.switch(
+                                    value=is_tool_enabled(name, 'meta'),
+                                    on_change=lambda e, tool_name=name: toggle_meta_tool(e.value, tool_name)
+                                ).props('color=primary size=sm')
+                            
                             with ui.element('div').classes('p-2 font-mono text-xs w-1/3'):
                                 ui.label(name)
-                            with ui.element('div').classes('p-2 text-sm w-2/3'):
+                            with ui.element('div').classes('p-2 text-sm w-1/2'):
                                 ui.label(schema['description'])
             else:
                 ui.label('No hay Meta Tools registradas').classes('text-sm italic text-gray-500')
+        
+        # MCP Tools Management Card
+        mcp_tools_container = ui.column().classes('w-full')
+        
+        def refresh_mcp_tools_list():
+            """Refresh the MCP tools list UI"""
+            mcp_tools_container.clear()
+            
+            with mcp_tools_container:
+                with ui.card().classes('w-full mb-6'):
+                    ui.label('MCP Tools Disponibles').classes('text-lg font-semibold mb-3')
+                    ui.label('Activa o desactiva herramientas individuales de los servidores MCP conectados.').classes('text-sm text-gray-600 mb-2')
+                    
+                    # Obtener todas las MCP tools disponibles
+                    from mcp_open_client.config_utils import is_tool_enabled, set_tool_enabled
+                    
+                    # Función asíncrona para obtener tools
+                    async def get_mcp_tools_for_ui():
+                        try:
+                            if not mcp_client_manager.is_connected():
+                                return []
+                            
+                            mcp_tools = await mcp_client_manager.list_tools()
+                            
+                            # Crear lista de tools individuales extrayendo servidor del nombre
+                            individual_tools = []
+                            
+                            for tool in mcp_tools:
+                                full_tool_name = tool.get('name') if isinstance(tool, dict) else getattr(tool, 'name', '')
+                                tool_desc = tool.get('description') if isinstance(tool, dict) else getattr(tool, 'description', '')
+                                
+                                # Extraer servidor y nombre real de la tool
+                                # Formato: "servidor_nombre_tool" -> servidor="servidor", tool="nombre_tool"
+                                if '_' in full_tool_name:
+                                    # Buscar el primer _ para separar servidor del resto
+                                    parts = full_tool_name.split('_', 1)
+                                    server_name = parts[0]
+                                    actual_tool_name = parts[1]
+                                else:
+                                    # Si no tiene _, asumir que no tiene prefijo de servidor
+                                    server_name = 'unknown'
+                                    actual_tool_name = full_tool_name
+                                
+                                tool_id = f"{server_name}:{actual_tool_name}"
+                                individual_tools.append({
+                                    'tool_name': actual_tool_name,
+                                    'server_name': server_name,
+                                    'tool_id': tool_id,
+                                    'description': tool_desc
+                                })
+                            
+                            return individual_tools
+                        except Exception as e:
+                            print(f"Error getting MCP tools: {e}")
+                            return []
+                    
+                    # Obtener tools de forma síncrona para la UI
+                    import asyncio
+                    try:
+                        # Crear un contenedor para las tools
+                        mcp_tools_list_container = ui.column().classes('w-full')
+                        
+                        # Cargar tools de forma asíncrona
+                        async def load_and_display_tools():
+                            tools_list = await get_mcp_tools_for_ui()
+                            
+                            mcp_tools_list_container.clear()
+                            
+                            with mcp_tools_list_container:
+                                if tools_list:
+                                    # Crear tabla de MCP tools
+                                    with ui.element('div').classes('w-full border rounded').style('max-height: 400px; overflow-y: auto;'):
+                                        # Encabezados
+                                        with ui.element('div').classes('bg-secondary text-white flex'):
+                                            with ui.element('div').classes('p-2 w-16'):
+                                                ui.label('Estado')
+                                            with ui.element('div').classes('p-2 w-1/4'):
+                                                ui.label('Servidor')
+                                            with ui.element('div').classes('p-2 w-1/4'):
+                                                ui.label('Tool')
+                                            with ui.element('div').classes('p-2 w-1/3'):
+                                                ui.label('Descripción')
+                                        
+                                        # Filas con switches - cada tool individual
+                                        for tool_info in tools_list:
+                                            with ui.element('div').classes('flex border-b hover:bg-gray-100 items-center'):
+                                                with ui.element('div').classes('p-2 w-16'):
+                                                    def toggle_mcp_tool(enabled, tool_id=tool_info['tool_id']):
+                                                        set_tool_enabled(tool_id, enabled, 'mcp')
+                                                        ui.notify(f"MCP tool '{tool_id}' {'habilitada' if enabled else 'deshabilitada'}", color='positive')
+                                                    
+                                                    ui.switch(
+                                                        value=is_tool_enabled(tool_info['tool_id'], 'mcp'),
+                                                        on_change=lambda e, tool_id=tool_info['tool_id']: toggle_mcp_tool(e.value, tool_id)
+                                                    ).props('color=secondary size=sm')
+                                                
+                                                with ui.element('div').classes('p-2 text-xs w-1/4'):
+                                                    ui.label(tool_info['server_name'])
+                                                with ui.element('div').classes('p-2 font-mono text-xs w-1/4'):
+                                                    ui.label(tool_info['tool_name'])
+                                                with ui.element('div').classes('p-2 text-sm w-1/3'):
+                                                    ui.label(tool_info['description'])
+                                else:
+                                    ui.label('No hay MCP Tools disponibles. Asegúrate de que los servidores MCP estén conectados.').classes('text-sm italic text-gray-500')
+                        
+                        # Ejecutar la carga asíncrona
+                        asyncio.create_task(load_and_display_tools())
+                        
+                    except Exception as e:
+                        ui.label(f'Error cargando MCP tools: {str(e)}').classes('text-sm text-red-500')
+        
+        # Llamar la función para mostrar las MCP tools
+        refresh_mcp_tools_list()
         
         # Create a container for the servers list that can be refreshed
         servers_container = ui.column().classes('w-full')
@@ -117,9 +246,6 @@ def show_content(container):
                         icon = 'help'
                         color = 'warning'
                     
-                    # Determine status
-                    is_disabled = config.get('disabled', False)
-                    status = 'Deshabilitado' if is_disabled else 'Activo'
                     
                     # Server card
                     with ui.card().classes('w-full mb-4'):
@@ -127,57 +253,14 @@ def show_content(container):
                             with ui.row().classes('items-center'):
                                 ui.icon(icon).classes(f'mr-2 text-{color}')
                                 ui.label(name).classes('text-lg font-semibold')
-                                ui.badge(status).classes(f"{'bg-green text-white' if not is_disabled else 'bg-gray text-white'} ml-2")
                             
                             with ui.row().classes('gap-2'):
-                                ui.switch(
-                                    value=not is_disabled,
-                                    on_change=lambda e, name=name: toggle_server_status(name, not e.value)
-                                ).props('color=primary').tooltip('Habilitar/Deshabilitar')
-                                
                                 ui.button('', icon='edit', on_click=lambda name=name, config=config: show_edit_dialog(name, config)).props('flat round color=primary size=sm').tooltip('Editar')
                                 ui.button('', icon='delete', on_click=lambda name=name: show_delete_dialog(name)).props('flat round color=negative size=sm').tooltip('Eliminar')
                         
                         ui.label(f'Tipo: {server_type}').classes('text-sm text-gray-600 mb-2')
-                        
-                        with ui.expansion('Detalles de Configuración', icon='info').classes('w-full'):
-                            ui.label(details).classes('text-sm font-mono bg-gray-100 p-2 rounded')
+                        ui.label(details).classes('text-sm font-mono bg-gray-100 p-2 rounded')
         
-        # Function to toggle server status
-        def toggle_server_status(server_name, is_active):
-            """Toggle a server's active status"""
-            current_config = app.storage.user.get('mcp-config', {})
-            if "mcpServers" in current_config and server_name in current_config["mcpServers"]:
-                # Toggle the disabled flag (note: in the config, 'disabled' means not active)
-                current_config["mcpServers"][server_name]["disabled"] = is_active
-                
-                app.storage.user['mcp-config'] = current_config
-                
-                status_text = "disabled" if is_active else "enabled"
-                ui.notify(f"Server '{server_name}' {status_text}", color='positive')
-                
-                # Update the MCP client manager with the new configuration
-                async def update_mcp_client():
-                    try:
-                        success = await mcp_client_manager.initialize(current_config)
-                        if success:
-                            active_servers = mcp_client_manager.get_active_servers()
-                            # Use storage for safe notification from background tasks
-                            app.storage.user['mcp_status'] = f"Connected to {len(active_servers)} MCP servers"
-                            app.storage.user['mcp_status_color'] = 'positive'
-                        else:
-                            app.storage.user['mcp_status'] = "No active MCP servers"
-                            app.storage.user['mcp_status_color'] = 'warning'
-                    except Exception as e:
-                        app.storage.user['mcp_status'] = f"Error connecting to MCP servers: {str(e)}"
-                        app.storage.user['mcp_status_color'] = 'negative'
-                    
-                    # Only refresh the UI after the client has been initialized
-                    # This prevents potential race conditions
-                    refresh_servers_list()
-                
-                # Run the update asynchronously
-                asyncio.create_task(update_mcp_client())
         
         # Function to delete a server
         def delete_server(server_name):
@@ -211,6 +294,7 @@ def show_content(container):
                     # Only refresh the UI after the client has been initialized
                     # This prevents potential race conditions
                     refresh_servers_list()
+                    refresh_mcp_tools_list()
                 
                 # Run the update asynchronously
                 asyncio.create_task(update_mcp_client())
@@ -334,6 +418,7 @@ def show_content(container):
                             # Only refresh the UI after the client has been initialized
                             # This prevents potential race conditions
                             refresh_servers_list()
+                            refresh_mcp_tools_list()
                         
                         # Run the update asynchronously
                         asyncio.create_task(update_mcp_client())
@@ -459,6 +544,7 @@ def show_content(container):
                             # Only refresh the UI after the client has been initialized
                             # This prevents potential race conditions
                             refresh_servers_list()
+                            refresh_mcp_tools_list()
                         
                         # Run the update asynchronously
                         asyncio.create_task(update_mcp_client())
@@ -502,6 +588,7 @@ def show_content(container):
                     
                     # Refresh the UI after the client has been initialized
                     refresh_servers_list()
+                    refresh_mcp_tools_list()
                 
                 # Run the update asynchronously
                 asyncio.create_task(update_mcp_client())
