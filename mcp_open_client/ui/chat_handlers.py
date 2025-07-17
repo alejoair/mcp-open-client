@@ -9,6 +9,11 @@ from mcp_open_client.meta_tools.conversation_context import inject_context_to_me
 import asyncio
 import json
 
+def _get_tool_choice_required():
+    """Get tool_choice_required setting from user configuration"""
+    user_settings = app.storage.user.get('user-settings', {})
+    return user_settings.get('tool_choice_required', False)
+
 def _final_tool_sequence_validation(messages, force_cleanup=False):
     """Final validation for tool sequences with optional force cleanup"""
     return validate_tool_call_sequence(messages)
@@ -129,7 +134,7 @@ def get_messages(include_stats: bool = False) -> List[Dict[str, Any]] | Dict[str
         return messages
     return [] if not include_stats else {'messages': [], 'stats': {'total_tokens': 0, 'total_chars': 0, 'message_count': 0}}
 
-def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any]]] = None, tool_call_id: Optional[str] = None) -> None:
+def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any]]] = None, tool_call_id: Optional[str] = None, **metadata) -> None:
     """Add a message to the current conversation"""
     if not current_conversation_id:
         create_new_conversation()
@@ -149,6 +154,10 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         # Add tool call ID if present (for tool messages)
         if tool_call_id:
             message['tool_call_id'] = tool_call_id
+        
+        # Add any additional metadata
+        for key, value in metadata.items():
+            message[key] = value
         
         # Process message through history manager for size limits
         processed_message = history_manager.process_message_for_storage(message)
@@ -193,6 +202,10 @@ def find_tool_response(tool_call_id: str) -> Optional[str]:
     for msg in messages:
         if (msg.get('role') == 'tool' and 
             msg.get('tool_call_id') == tool_call_id):
+            # Check if this is a respond_to_user or notify_user tool call
+            # If so, don't show the tool response since it's already shown as assistant message
+            if msg.get('_is_respond_to_user') or msg.get('_is_notify_user'):
+                return None
             return msg.get('content', '')
     return None
 
@@ -216,58 +229,58 @@ def render_message_to_ui(message: dict, message_container) -> None:
                     truncated_color = current_colors.get('truncated_message', '#fbbf24')
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style(f'color: {truncated_color};')
         elif role == 'assistant':
-            with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl').style('border-left: 4px solid #f87171; background: #374151; padding: 8px;') as bot_card:
-                if content:
-                    parse_and_render_message(content, bot_card)
-                
-                # Show truncation notice if message was truncated
-                if was_truncated:
-                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
-                
-                # Show tool calls if present
-                if tool_calls:
-                    ui.separator().style('margin: 0;')
-                    for i, tool_call in enumerate(tool_calls):
-                        function_info = tool_call.get('function', {})
-                        tool_name = function_info.get('name', 'unknown')
-                        tool_args = function_info.get('arguments', '{}')
-                        
-                        # Extract readable tool name (remove server prefix and convert underscores)
-                        display_name = tool_name
-                        if '_' in tool_name:
-                            # Split by underscore and take the last parts (actual tool name)
-                            parts = tool_name.split('_')
-                            if len(parts) > 2:  # Has server prefix like "mcp-requests_http_put"
-                                display_name = ' '.join(parts[1:]).replace('_', ' ').upper()
-                            else:  # Simple case like "http_put"
-                                display_name = ' '.join(parts).replace('_', ' ').upper()
-                        
-                        # Find corresponding tool response
-                        tool_call_id = tool_call.get('id')
-                        tool_response = find_tool_response(tool_call_id) if tool_call_id else None
-                        
-                        with ui.expansion(f"{display_name}",
-                                        icon=None,
-                                        value=False).classes('w-full max-w-full overflow-hidden text-sm').props('dense header-class="text-sm font-normal text-warning"').style('border-left: 4px solid var(--q-tool_call_border); background: var(--q-tool_call_bg); max-width: 100%; box-sizing: border-box; margin: 0;'):
-                            # Tool Call Section
-                            ui.label('Arguments:').classes('font-semibold').style('color: var(--q-tool_args_label);')
-                            try:
-                                # Try to format JSON arguments nicely
-                                formatted_args = json.dumps(json.loads(tool_args), indent=2)
-                                ui.code(formatted_args, language='json').classes('w-full overflow-x-auto')
-                            except:
-                                ui.code(tool_args, language='json').classes('w-full overflow-x-auto')
+            # Only create container if there's content, tool calls, or truncation info to show
+            if content or tool_calls or was_truncated:
+                with ui.card().classes('assistant-message message-bubble mb-2 max-w-5xl').style('border-left: 4px solid #f87171; background: #374151; padding: 8px;') as bot_card:
+                    if content:
+                        parse_and_render_message(content, bot_card)
+                    
+                    # Show truncation notice if message was truncated
+                    if was_truncated:
+                        ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
+                    
+                    # Show tool calls if present
+                    if tool_calls:
+                        ui.separator().style('margin: 0;')
+                        for i, tool_call in enumerate(tool_calls):
+                            function_info = tool_call.get('function', {})
+                            tool_name = function_info.get('name', 'unknown')
+                            tool_args = function_info.get('arguments', '{}')
                             
-                            # Tool Response Section (if available)
-                            if tool_response:
-                                ui.separator().style('margin: 0;')
-                                ui.label('Response:').classes('font-semibold').style('color: var(--q-tool_response_label);')
-                                # Use HTML with strict width control to prevent horizontal expansion
-                                import html
-                                escaped_response = html.escape(tool_response)
-                                ui.html(f'''<div style="width: 100%; max-width: calc(100vw - 48px); overflow: hidden; box-sizing: border-box;">
-                                    <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; width: 100%; max-width: 100%; margin: 0; padding: 0.5rem; background: transparent; font-family: monospace; font-size: 0.875rem; overflow-x: auto; box-sizing: border-box; word-break: break-all;">{escaped_response}</pre>
-                                </div>''')
+                            # Extract readable tool name (remove server prefix and convert underscores)
+                            display_name = tool_name
+                            if '_' in tool_name:
+                                # Split by underscore and take the last parts (actual tool name)
+                                parts = tool_name.split('_')
+                                if len(parts) > 2:  # Has server prefix like "mcp-requests_http_put"
+                                    display_name = ' '.join(parts[1:]).replace('_', ' ').upper()
+                                else:  # Simple case like "http_put"
+                                    display_name = ' '.join(parts).replace('_', ' ').upper()
+                            
+                            # Find corresponding tool response
+                            tool_call_id = tool_call.get('id')
+                            tool_response = find_tool_response(tool_call_id) if tool_call_id else None
+                            
+                            with ui.expansion(f"{display_name}",
+                                            icon=None,
+                                            value=False).classes('w-full max-w-full overflow-hidden text-sm').props('dense header-class="text-sm font-normal text-warning"').style('border-left: 4px solid var(--q-tool_call_border); background: var(--q-tool_call_bg); max-width: 100%; box-sizing: border-box; margin: 0;'):
+                                # Tool Call Section
+                                ui.label('Arguments:').classes('font-semibold').style('color: var(--q-tool_args_label);')
+                                try:
+                                    # Try to format JSON arguments nicely
+                                    formatted_args = json.dumps(json.loads(tool_args), indent=2)
+                                    ui.code(formatted_args, language='json').classes('w-full overflow-x-auto')
+                                except:
+                                    ui.code(tool_args, language='json').classes('w-full overflow-x-auto')
+                                
+                                # Tool Response Section (if available)
+                                if tool_response:
+                                    ui.separator().style('margin: 0;')
+                                    ui.label('Response:').classes('font-semibold').style('color: var(--q-tool_response_label);')
+                                    # Create a container for the tool response with controlled width
+                                    with ui.element('div').style('width: 100%; max-width: calc(100vw - 48px); overflow: hidden; box-sizing: border-box;') as response_container:
+                                        # Use parse_and_render_message to enable structured responses
+                                        parse_and_render_message(tool_response, response_container)
         elif role == 'tool':
             # Skip individual tool messages - they're now grouped with assistant messages
             pass
@@ -556,7 +569,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             # Call LLM with tools if available, with enhanced error handling
             try:
                 if available_tools:
-                    response = await api_client.chat_completion(api_messages, tools=available_tools)
+                    # Check if tool_choice should be required
+                    tool_choice_required = _get_tool_choice_required()
+                    if tool_choice_required:
+                        response = await api_client.chat_completion(api_messages, tools=available_tools, tool_choice="required")
+                    else:
+                        response = await api_client.chat_completion(api_messages, tools=available_tools)
                 else:
                     response = await api_client.chat_completion(api_messages)
             except Exception as api_error:
@@ -605,9 +623,106 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 # Handle tool calls
                 tool_calls = extract_tool_calls(response)
                 
-                # Add the assistant message with tool calls to conversation
-                assistant_message = response['choices'][0]['message']
-                add_message('assistant', assistant_message.get('content', ''), tool_calls=assistant_message.get('tool_calls'))
+                # FILTRO ESPECIAL: Detectar si hay llamadas a respond_to_user o notify_user
+                respond_to_user_call = None
+                notify_user_calls = []
+                for tool_call in tool_calls:
+                    if tool_call.get('function', {}).get('name') == 'meta-respond_to_user':
+                        respond_to_user_call = tool_call
+                        break  # Solo puede haber uno de estos y termina la ejecución
+                    elif tool_call.get('function', {}).get('name') == 'meta-notify_user':
+                        notify_user_calls.append(tool_call)  # Puede haber múltiples
+                
+                if respond_to_user_call:
+                    # CASO ESPECIAL: respond_to_user se trata como respuesta directa del asistente
+                    # NO se agrega como tool call al historial, se convierte directamente en mensaje del asistente
+                    try:
+                        tool_result = await handle_tool_call(respond_to_user_call)
+                        # Agregar directamente como mensaje del asistente (sin tool call en historial)
+                        add_message('assistant', tool_result['content'])
+                        
+                        # Update UI
+                        message_container.clear()
+                        from .chat_interface import render_messages
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                        # TERMINAR AQUÍ - no continuar procesando ni enviar de vuelta al LLM
+                        return
+                        
+                    except Exception as e:
+                        print(f"Error processing respond_to_user: {e}")
+                        # Fallback: agregar mensaje de error
+                        add_message('assistant', f"Error generating response: {str(e)}")
+                        message_container.clear()
+                        from .chat_interface import render_messages
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        return
+                
+                if notify_user_calls:
+                    # CASO ESPECIAL: Procesar TODAS las llamadas a notify_user
+                    try:
+                        # PRIMERO: Agregar el assistant message original solo si tiene tool calls no-meta o contenido relevante
+                        assistant_message = response['choices'][0]['message']
+                        original_tool_calls = assistant_message.get('tool_calls', [])
+                        filtered_tool_calls = [tc for tc in original_tool_calls if tc.get('function', {}).get('name') not in ['meta-respond_to_user', 'meta-notify_user']]
+                        original_content = (assistant_message.get('content') or '').strip()
+                        
+                        # Solo agregar el mensaje original si tiene tool calls no-meta y contenido
+                        if filtered_tool_calls and original_content:
+                            add_message('assistant', original_content, tool_calls=filtered_tool_calls)
+                        
+                        # SEGUNDO: Procesar cada notify_user secuencialmente
+                        for notify_call in notify_user_calls:
+                            tool_result = await handle_tool_call(notify_call)
+                            
+                            # NO agregar tool result al historial para evitar confundir al LLM
+                            # Solo agregar mensaje del asistente con formato visual para el usuario
+                            notification_content = tool_result.get('_notification_content', tool_result['content'])
+                            add_message('assistant', notification_content)
+                        
+                        # Update UI
+                        message_container.clear()
+                        from .chat_interface import render_messages
+                        render_messages(message_container)
+                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                        
+                        # Procesar tool calls restantes (excluyendo notify_user)
+                        remaining_tool_calls = [tc for tc in tool_calls if tc.get('function', {}).get('name') != 'meta-notify_user']
+                        tool_calls = remaining_tool_calls
+                        
+                    except Exception as e:
+                        print(f"Error processing notify_user: {e}")
+                        # Continuar con otros tool calls en caso de error
+                        tool_calls = [tc for tc in tool_calls if tc.get('function', {}).get('name') != 'meta-notify_user']
+                        # No hacer return aquí - continuar el flujo incluso si hay error
+                
+                # Verificar si quedan tool calls para procesar
+                if not tool_calls:
+                    # Si no quedan tool calls (solo había notify_user), continuar el bucle para que el LLM pueda seguir trabajando
+                    # Las notificaciones ya se mostraron al usuario, ahora el LLM puede continuar
+                    # Update UI
+                    message_container.clear()
+                    from .chat_interface import render_messages
+                    render_messages(message_container)
+                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                    # Continuar el bucle naturalmente - no hacer return ni break
+                else:
+                    # CASO NORMAL: Procesar tool calls normales (no respond_to_user ni notify_user)
+                    # Agregar el mensaje del asistente original al historial AHORA (después de procesar meta tools)
+                    assistant_message = response['choices'][0]['message']
+                
+                # FILTRAR tool calls para la UI (excluir respond_to_user y notify_user)
+                original_tool_calls = assistant_message.get('tool_calls', [])
+                filtered_tool_calls = []
+                for tool_call in original_tool_calls:
+                    tool_name = tool_call.get('function', {}).get('name')
+                    if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
+                        filtered_tool_calls.append(tool_call)
+                
+                # Agregar mensaje del asistente al historial (con tool calls filtrados para UI)
+                add_message('assistant', assistant_message.get('content', ''), tool_calls=filtered_tool_calls)
                 
                 # Update UI immediately after adding assistant message with tool calls
                 message_container.clear()
@@ -624,6 +739,13 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         
                         # Add tool result to conversation storage
                         add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                        
+                        # ESPECIAL: Si es notify_user, agregar mensaje del asistente con el contenido de notificación
+                        if tool_result.get('_is_notify_user', False):
+                            notification_content = tool_result.get('_notification_content', '')
+                            if notification_content:
+                                # Agregar mensaje del asistente con el contenido formateado de la notificación
+                                add_message('assistant', notification_content)
                         
                         # Verify the tool result was added correctly
                         messages_after_add = get_messages()
@@ -759,7 +881,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         api_messages = clean_orphaned_tools(get_messages())
                         
                         if available_tools:
-                            response = await api_client.chat_completion(api_messages, tools=available_tools)
+                            # Check if tool_choice should be required
+                            tool_choice_required = _get_tool_choice_required()
+                            if tool_choice_required:
+                                response = await api_client.chat_completion(api_messages, tools=available_tools, tool_choice="required")
+                            else:
+                                response = await api_client.chat_completion(api_messages, tools=available_tools)
                         else:
                             response = await api_client.chat_completion(api_messages)
                         
@@ -780,8 +907,15 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             content = assistant_message.get('content', '')
                             tool_calls = assistant_message.get('tool_calls', [])
                             
+                            # FILTRAR tool calls para excluir respond_to_user y notify_user de la UI (bucle)
+                            filtered_tool_calls_loop = []
+                            for tool_call in tool_calls:
+                                tool_name = tool_call.get('function', {}).get('name')
+                                if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
+                                    filtered_tool_calls_loop.append(tool_call)
+                            
                             # Add assistant response
-                            add_message('assistant', content, tool_calls)
+                            add_message('assistant', content, filtered_tool_calls_loop)
                             
                             # Re-render messages to show assistant response
                             message_container.clear()
@@ -794,7 +928,81 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                 break
                             
                             # Execute tool calls if present
+                            
+                            # FILTRO ESPECIAL: Detectar si hay llamada a respond_to_user o notify_user en el bucle
+                            respond_to_user_call_in_loop = None
+                            notify_user_call_in_loop = None
+                            for tool_call in tool_calls:
+                                if tool_call.get('function', {}).get('name') == 'meta-respond_to_user':
+                                    respond_to_user_call_in_loop = tool_call
+                                    break
+                                elif tool_call.get('function', {}).get('name') == 'meta-notify_user':
+                                    notify_user_call_in_loop = tool_call
+                                    break
+                            
+                            if respond_to_user_call_in_loop:
+                                # CASO ESPECIAL EN BUCLE: respond_to_user se trata como respuesta directa
+                                try:
+                                    tool_result = await handle_tool_call(respond_to_user_call_in_loop)
+                                    # Agregar directamente como mensaje del asistente (sin tool call en historial)
+                                    add_message('assistant', tool_result['content'])
+                                    
+                                    # Update UI
+                                    message_container.clear()
+                                    from .chat_interface import render_messages
+                                    render_messages(message_container)
+                                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                                    
+                                    # TERMINAR BUCLE - no continuar procesando
+                                    break
+                                    
+                                except Exception as e:
+                                    print(f"Error processing respond_to_user in loop: {e}")
+                                    # Fallback: agregar mensaje de error y terminar
+                                    add_message('assistant', f"Error generating response: {str(e)}")
+                                    message_container.clear()
+                                    from .chat_interface import render_messages
+                                    render_messages(message_container)
+                                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                                    break
+                            
+                            if notify_user_call_in_loop:
+                                # CASO ESPECIAL EN BUCLE: notify_user se procesa como notificación sin mostrar tool call EN LA UI
+                                # PERO SÍ se agrega al historial para que el LLM vea el resultado
+                                try:
+                                    tool_result = await handle_tool_call(notify_user_call_in_loop)
+                                    
+                                    # IMPORTANTE: Agregar el tool result al historial para que el LLM lo vea
+                                    # (El assistant message ya fue agregado en iteraciones previas del bucle)
+                                    add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'], _is_notify_user=True)
+                                    
+                                    # ADEMÁS: Agregar mensaje del asistente con formato visual para el usuario
+                                    notification_content = tool_result.get('_notification_content', tool_result['content'])
+                                    add_message('assistant', notification_content)
+                                    
+                                    # Update UI
+                                    message_container.clear()
+                                    from .chat_interface import render_messages
+                                    render_messages(message_container)
+                                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                                    
+                                    # NO TERMINAR BUCLE - notify_user no termina el flujo, continuar procesando otros tool calls
+                                    # Procesar tool calls restantes (excluyendo notify_user)
+                                    remaining_tool_calls_loop = [tc for tc in tool_calls if tc.get('function', {}).get('name') != 'meta-notify_user']
+                                    if not remaining_tool_calls_loop:
+                                        # Si solo había notify_user, continuar el bucle - el LLM ahora ve el tool result
+                                        continue
+                                    # Si hay más tool calls, continuar con el procesamiento normal
+                                    tool_calls = remaining_tool_calls_loop
+                                    
+                                except Exception as e:
+                                    print(f"Error processing notify_user in loop: {e}")
+                                    # Continuar con otros tool calls en caso de error
+                                    tool_calls = [tc for tc in tool_calls if tc.get('function', {}).get('name') != 'meta-notify_user']
+                                    if not tool_calls:
+                                        continue
                            
+                            # CASO NORMAL: Procesar tool calls normales (no respond_to_user ni notify_user)
                             tool_results = []
                             for tool_call in tool_calls:
                                 try:
@@ -803,6 +1011,13 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                     
                                     # Add tool result to conversation storage
                                     add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                                    
+                                    # ESPECIAL: Si es notify_user, agregar mensaje del asistente con el contenido de notificación
+                                    if tool_result.get('_is_notify_user', False):
+                                        notification_content = tool_result.get('_notification_content', '')
+                                        if notification_content:
+                                            # Agregar mensaje del asistente con el contenido formateado de la notificación
+                                            add_message('assistant', notification_content)
                                     
                                     # Update UI immediately after each tool result
                                     message_container.clear()

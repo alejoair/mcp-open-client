@@ -218,6 +218,31 @@ Please retry with properly formatted JSON."""
                     elif 'result' in result:
                         # Success with result
                         content = str(result['result'])
+                        
+                        # ESPECIAL: Si es respond_to_user, marcar el contenido para manejo especial en UI
+                        if tool_name in ["meta-respond_to_user", "respond_to_user"]:
+                            # Marcar que este resultado necesita mostrar mensaje adicional en UI
+                            # pero sin romper la secuencia tool_call -> tool_result
+                            return {
+                                "tool_call_id": tool_call_id,
+                                "role": "tool",
+                                "content": content,
+                                "_is_respond_to_user": True  # Flag para indicar que debe mostrar mensaje adicional
+                            }
+                        
+                        # ESPECIAL: Si es notify_user, marcar para agregar mensaje del asistente sin terminar flujo
+                        if tool_name in ["meta-notify_user", "notify_user"]:
+                            # Marcar que este resultado necesita mostrar mensaje adicional en UI
+                            # pero SIN terminar el flujo (a diferencia de respond_to_user)
+                            # content ya contiene el mensaje formateado con metadatos
+                            return {
+                                "tool_call_id": tool_call_id,
+                                "role": "tool",
+                                "content": "✅ Notificación enviada al usuario exitosamente.",  # Confirmación simple al LLM
+                                "_is_notify_user": True,  # Flag para indicar que debe mostrar mensaje adicional
+                                "_notification_content": content  # Contenido formateado con metadatos para mostrar al usuario
+                            }
+                        
                     else:
                         # Success with unknown format
                         content = f"Meta tool executed successfully: {str(result)}"

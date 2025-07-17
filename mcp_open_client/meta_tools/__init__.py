@@ -12,5 +12,7 @@ from mcp_open_client.meta_tools.meta_tool import meta_tool_registry, meta_tool
 import mcp_open_client.meta_tools.server_control
 import mcp_open_client.meta_tools.conversation_context
 import mcp_open_client.meta_tools.ui_colors
+import mcp_open_client.meta_tools.respond_to_user
+import mcp_open_client.meta_tools.notify_user
 
 __all__ = ['meta_tool_registry', 'meta_tool']
