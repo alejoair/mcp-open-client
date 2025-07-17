@@ -33,7 +33,6 @@ class HistoryManager:
     def update_setting(self, setting_name, value):
         """Update a specific setting and save to storage"""
         if setting_name not in self._default_settings:
-            print(f"WARNING: Unknown setting '{setting_name}'")
             return False
             
         try:
@@ -41,10 +40,8 @@ class HistoryManager:
             if 'history-settings' not in app.storage.user:
                 app.storage.user['history-settings'] = {}
             app.storage.user['history-settings'][setting_name] = value
-            print(f"DEBUG: Updated {setting_name} to: {value}")
             return True
         except Exception as e:
-            print(f"DEBUG: Failed to save {setting_name}: {e}")
             return False
     
     def update_max_messages(self, max_messages):
@@ -289,7 +286,6 @@ class HistoryManager:
             
             return settings
         except Exception as e:
-            print(f"WARNING: Error loading settings: {e}")
             return self._default_settings.copy()
     
     def get_settings(self):
@@ -301,10 +297,8 @@ class HistoryManager:
         try:
             from nicegui import app
             app.storage.user['history-settings'] = self._default_settings.copy()
-            print("Settings reset to defaults")
             return True
         except Exception as e:
-            print(f"ERROR: Failed to reset settings: {e}")
             return False
 
 # Global instance

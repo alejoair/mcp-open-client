@@ -445,7 +445,7 @@ favicon_svg = '''
 ui.run(
     title="MCP Open Client",
     storage_secret="ultrasecretkeyboard",
-    port=8091,
+    port=8090,
     reload=False,
     dark=True,
     show_welcome_message=True,

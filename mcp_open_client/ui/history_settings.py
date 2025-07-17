@@ -32,44 +32,76 @@ def create_history_settings_ui(container):
             ui.label('Máximo de mensajes por conversación').classes('text-sm text-gray-600 mb-2')
             
             with ui.row().classes('w-full items-center gap-4 mb-4'):
-                max_messages = ui.number(
-                    value=history_manager.max_messages,
+                # Obtener valor actual al momento de crear la UI
+                current_max_messages = history_manager.max_messages
+                
+                max_messages_input = ui.number(
+                    value=current_max_messages,
                     min=10,
                     max=200,
                     step=10
                 ).classes('flex-1')
                 
-                ui.label(f'Actual: {history_manager.max_messages} mensajes').classes('text-sm text-gray-600')
+                # Etiqueta que se actualizará dinámicamente
+                max_messages_label = ui.label(f'Actual: {current_max_messages} mensajes').classes('text-sm text-gray-600')
                 
             # Max tokens configuration
             ui.separator().classes('q-my-md')
             ui.label('Máximo de tokens por conversación').classes('text-sm text-gray-600 mb-2')
             
             with ui.row().classes('w-full items-center gap-4 mb-4'):
+                # Obtener valor actual al momento de crear la UI
                 settings = history_manager.settings
-                max_tokens = ui.number(
-                    value=settings.get('max_tokens_per_conversation', 50000),
+                current_max_tokens = settings.get('max_tokens_per_conversation', 50000)
+                
+                max_tokens_input = ui.number(
+                    value=current_max_tokens,
                     min=10000,
                     max=200000,
                     step=1000
                 ).classes('flex-1')
                 
-                ui.label(f'Actual: {settings.get("max_tokens_per_conversation", 50000):,} tokens').classes('text-sm text-gray-600')
+                # Etiqueta que se actualizará dinámicamente
+                max_tokens_label = ui.label(f'Actual: {current_max_tokens:,} tokens').classes('text-sm text-gray-600')
             
             # Update button
             def update_settings():
-                history_manager.update_max_messages(int(max_messages.value) if hasattr(max_messages, 'value') else max_messages)
-                history_manager.update_setting('max_tokens_per_conversation', int(max_tokens.value) if hasattr(max_tokens, 'value') else max_tokens)
+                # Obtener valores actuales de los inputs
+                new_max_messages = int(max_messages_input.value)
+                new_max_tokens = int(max_tokens_input.value)
                 
-                # Get updated settings
-                updated_settings = history_manager.settings
+                # Actualizar configuración
+                success1 = history_manager.update_max_messages(new_max_messages)
+                success2 = history_manager.update_setting('max_tokens_per_conversation', new_max_tokens)
                 
-                ui.notify(
-                    f'Configuración actualizada:\n'
-                    f'- Máximo {updated_settings.get("max_messages")} mensajes\n'
-                    f'- Máximo {updated_settings.get("max_tokens_per_conversation"):,} tokens',
-                    color='positive'
-                )
+                
+                if success1 and success2:
+                    # Get updated settings para verificar
+                    updated_settings = history_manager.settings
+                    
+                    # Verificar que los valores se guardaron correctamente
+                    saved_max_messages = history_manager.max_messages
+                    saved_max_tokens = updated_settings.get('max_tokens_per_conversation')
+                    
+                    
+                    # Actualizar las etiquetas en la UI
+                    max_messages_label.text = f'Actual: {saved_max_messages} mensajes'
+                    max_tokens_label.text = f'Actual: {saved_max_tokens:,} tokens'
+                    ui.notify(
+                        f'✅ Configuración actualizada correctamente:\n'
+                        f'- Máximo {saved_max_messages} mensajes\n'
+                        f'- Máximo {saved_max_tokens:,} tokens',
+                        color='positive',
+                        timeout=3000
+                    )
+                else:
+                    ui.notify(
+                        f'❌ Error al guardar configuración:\n'
+                        f'- Max messages: {"✅" if success1 else "❌"}\n'
+                        f'- Max tokens: {"✅" if success2 else "❌"}',
+                        color='negative',
+                        timeout=5000
+                    )
             
             ui.button('Actualizar Configuración', icon='save', on_click=update_settings).props('color=primary')
         

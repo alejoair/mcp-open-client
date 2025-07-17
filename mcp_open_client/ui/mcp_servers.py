@@ -30,7 +30,8 @@ def show_content(container):
             ui.label('Conecta herramientas externas a través del protocolo MCP para expandir las capacidades de tu IA.').classes('text-sm text-gray-600 mb-4')
             
             with ui.row().classes('w-full gap-4'):
-                ui.button('Agregar Servidor', icon='add', on_click=lambda: show_add_dialog()).props('color=primary')
+                ui.button('Agregar Servidor Local', icon='computer', on_click=lambda: show_add_local_dialog()).props('color=primary')
+                ui.button('Agregar Servidor Remoto', icon='cloud', on_click=lambda: show_add_remote_dialog()).props('color=info')
                 ui.button('Restaurar por Defecto', icon='refresh', on_click=lambda: reset_to_default()).props('color=warning')
                 
                 def reset_tools_config():
@@ -329,7 +330,7 @@ def show_content(container):
                 # HTTP server fields
                 if is_http:
                     url = ui.input('Server URL', value=server_config.get('url', '')).classes('w-full')
-                    transport_options = ['streamable-http', 'http']
+                    transport_options = ['streamable-http', 'http', 'sse']
                     transport = ui.select(
                         transport_options,
                         value=server_config.get('transport', 'streamable-http'),
@@ -431,57 +432,29 @@ def show_content(container):
             # Open the dialog
             dialog.open()
         
-        # Dialog to add a new server
-        def show_add_dialog():
-            """Show dialog to add a new server"""
+        # Dialog to add a local server
+        def show_add_local_dialog():
+            """Show dialog to add a local server"""
             with ui.dialog() as dialog, ui.card().classes('w-96 p-4'):
-                ui.label('Add New MCP Server').classes('text-h6')
+                ui.label('Add Local MCP Server').classes('text-h6')
                 
                 server_name = ui.input('Server Name').classes('w-full')
+                command = ui.input('Command').classes('w-full')
+                args = ui.input('Arguments (space-separated)').classes('w-full')
+                env_vars = ui.input('Environment Variables (key=value, one per line)').classes('w-full')
+                env_vars.props('type=textarea rows=3')
                 
-                # Server type selection
-                server_type = ui.radio(['HTTP', 'Local'], value='Local').props('inline')
-                
-                # HTTP server fields
-                http_container = ui.column().classes('w-full')
-                with http_container:
-                    url = ui.input('Server URL').classes('w-full')
-                    transport = ui.select(
-                        ['streamable-http', 'http'],
-                        value='streamable-http',
-                        label='Transport'
-                    ).classes('w-full')
-                
-                # Local command fields
-                cmd_container = ui.column().classes('w-full')
-                with cmd_container:
-                    command = ui.input('Command').classes('w-full')
-                    args = ui.input('Arguments (space-separated)').classes('w-full')
-                    env_vars = ui.input('Environment Variables (key=value, one per line)').classes('w-full')
-                    env_vars.props('type=textarea rows=3')
-                
-                # Toggle visibility based on server type
-                def toggle_server_type():
-                    if server_type.value == 'HTTP':
-                        http_container.classes(remove='hidden')
-                        cmd_container.classes(add='hidden')
-                    else:
-                        http_container.classes(add='hidden')
-                        cmd_container.classes(remove='hidden')
-                
-                server_type.on('change', toggle_server_type)
-                
-                # Initial setup
-                toggle_server_type()
-                
-                # Buttons
                 with ui.row().classes('w-full justify-end'):
                     ui.button('Cancel', on_click=dialog.close).props('flat')
                     
-                    def add_server():
+                    def add_local_server():
                         name = server_name.value.strip()
                         if not name:
                             ui.notify('Server name is required', color='negative')
+                            return
+                        
+                        if not command.value:
+                            ui.notify('Command is required', color='negative')
                             return
                         
                         current_config = app.storage.user.get('mcp-config', {})
@@ -492,46 +465,28 @@ def show_content(container):
                             ui.notify(f"Server '{name}' already exists", color='negative')
                             return
                         
-                        # Create new server config
-                        new_config = {"disabled": False}
+                        new_config = {"disabled": False, "command": command.value}
                         
-                        if server_type.value == 'HTTP':
-                            if not url.value:
-                                ui.notify('URL is required', color='negative')
-                                return
-                            new_config["url"] = url.value
-                            new_config["transport"] = transport.value
-                        else:
-                            if not command.value:
-                                ui.notify('Command is required', color='negative')
-                                return
-                            new_config["command"] = command.value
-                            
-                            if args.value:
-                                new_config["args"] = args.value.split()
-                            
-                            if env_vars.value:
-                                env_dict = {}
-                                for line in env_vars.value.splitlines():
-                                    if '=' in line:
-                                        key, value = line.split('=', 1)
-                                        env_dict[key.strip()] = value.strip()
-                                if env_dict:
-                                    new_config["env"] = env_dict
+                        if args.value:
+                            new_config["args"] = args.value.split()
                         
-                        # Add the new server to the configuration
+                        if env_vars.value:
+                            env_dict = {}
+                            for line in env_vars.value.splitlines():
+                                if '=' in line:
+                                    key, value = line.split('=', 1)
+                                    env_dict[key.strip()] = value.strip()
+                            if env_dict:
+                                new_config["env"] = env_dict
+                        
                         current_config["mcpServers"][name] = new_config
                         app.storage.user['mcp-config'] = current_config
                         
-                        # Configuration automatically saved in user storage
-                        
-                        # Update the MCP client manager with the new configuration
                         async def update_mcp_client():
                             try:
                                 success = await mcp_client_manager.initialize(current_config)
                                 if success:
                                     active_servers = mcp_client_manager.get_active_servers()
-                                    # Use storage for safe notification from background tasks
                                     app.storage.user['mcp_status'] = f"Connected to {len(active_servers)} MCP servers"
                                     app.storage.user['mcp_status_color'] = 'positive'
                                 else:
@@ -541,20 +496,84 @@ def show_content(container):
                                 app.storage.user['mcp_status'] = f"Error connecting to MCP servers: {str(e)}"
                                 app.storage.user['mcp_status_color'] = 'negative'
                             
-                            # Only refresh the UI after the client has been initialized
-                            # This prevents potential race conditions
                             refresh_servers_list()
                             refresh_mcp_tools_list()
                         
-                        # Run the update asynchronously
                         asyncio.create_task(update_mcp_client())
-                        
-                        ui.notify(f"Server '{name}' added", color='positive')
+                        ui.notify(f"Local server '{name}' added", color='positive')
                         dialog.close()
                     
-                    ui.button('Add', on_click=add_server).props('color=primary')
+                    ui.button('Add', on_click=add_local_server).props('color=primary')
             
-            # Open the dialog
+            dialog.open()
+        
+        # Dialog to add a remote server
+        def show_add_remote_dialog():
+            """Show dialog to add a remote server"""
+            with ui.dialog() as dialog, ui.card().classes('w-96 p-4'):
+                ui.label('Add Remote MCP Server').classes('text-h6')
+                
+                server_name = ui.input('Server Name').classes('w-full')
+                url = ui.input('Server URL').classes('w-full')
+                transport = ui.select(
+                    ['streamable-http', 'http', 'sse'],
+                    value='streamable-http',
+                    label='Transport'
+                ).classes('w-full')
+                
+                with ui.row().classes('w-full justify-end'):
+                    ui.button('Cancel', on_click=dialog.close).props('flat')
+                    
+                    def add_remote_server():
+                        name = server_name.value.strip()
+                        if not name:
+                            ui.notify('Server name is required', color='negative')
+                            return
+                        
+                        if not url.value:
+                            ui.notify('URL is required', color='negative')
+                            return
+                        
+                        current_config = app.storage.user.get('mcp-config', {})
+                        if "mcpServers" not in current_config:
+                            current_config["mcpServers"] = {}
+                        
+                        if name in current_config["mcpServers"]:
+                            ui.notify(f"Server '{name}' already exists", color='negative')
+                            return
+                        
+                        new_config = {
+                            "disabled": False,
+                            "url": url.value,
+                            "transport": transport.value
+                        }
+                        
+                        current_config["mcpServers"][name] = new_config
+                        app.storage.user['mcp-config'] = current_config
+                        
+                        async def update_mcp_client():
+                            try:
+                                success = await mcp_client_manager.initialize(current_config)
+                                if success:
+                                    active_servers = mcp_client_manager.get_active_servers()
+                                    app.storage.user['mcp_status'] = f"Connected to {len(active_servers)} MCP servers"
+                                    app.storage.user['mcp_status_color'] = 'positive'
+                                else:
+                                    app.storage.user['mcp_status'] = "No active MCP servers"
+                                    app.storage.user['mcp_status_color'] = 'warning'
+                            except Exception as e:
+                                app.storage.user['mcp_status'] = f"Error connecting to MCP servers: {str(e)}"
+                                app.storage.user['mcp_status_color'] = 'negative'
+                            
+                            refresh_servers_list()
+                            refresh_mcp_tools_list()
+                        
+                        asyncio.create_task(update_mcp_client())
+                        ui.notify(f"Remote server '{name}' added", color='positive')
+                        dialog.close()
+                    
+                    ui.button('Add', on_click=add_remote_server).props('color=primary')
+            
             dialog.open()
         
         # Function to reset configuration to default
