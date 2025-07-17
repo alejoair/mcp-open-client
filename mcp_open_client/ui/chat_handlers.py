@@ -284,6 +284,9 @@ def render_message_to_ui(message: dict, message_container) -> None:
         elif role == 'tool':
             # Skip individual tool messages - they're now grouped with assistant messages
             pass
+        elif role == 'system':
+            # Skip system messages - they're only for LLM context, not for user display
+            pass
 
 def save_current_conversation() -> None:
     """Save current conversation to storage"""
@@ -677,10 +680,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         for notify_call in notify_user_calls:
                             tool_result = await handle_tool_call(notify_call)
                             
-                            # NO agregar tool result al historial para evitar confundir al LLM
-                            # Solo agregar mensaje del asistente con formato visual para el usuario
+                            # Agregar mensaje del asistente con formato visual para el usuario
                             notification_content = tool_result.get('_notification_content', tool_result['content'])
                             add_message('assistant', notification_content)
+                            
+                            # Agregar confirmación del sistema para que el LLM sepa que la notificación fue exitosa
+                            add_message('system', 'Has notificado exitosamente al usuario. No necesitas volver a notificar lo mismo. Puedes usar respond_to_user para finalizar o continuar con otras tareas.')
                         
                         # Update UI
                         message_container.clear()
@@ -730,13 +735,27 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 render_messages(message_container)
                 await safe_scroll_to_bottom(scroll_area, delay=0.1)
                 
-                # Process each tool call with error handling
+                # Process tool calls - parallel execution for better performance
                 tool_results = []
-                for tool_call in tool_calls:
+                
+                # Create tasks for parallel execution
+                async def process_single_tool_call(tool_call):
                     try:
-                        tool_result = await handle_tool_call(tool_call)
-                        tool_results.append(tool_result)
-                        
+                        return await handle_tool_call(tool_call)
+                    except Exception as e:
+                        # Return error result in consistent format
+                        return {
+                            'tool_call_id': tool_call['id'],
+                            'content': f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}",
+                            '_is_error': True
+                        }
+                
+                # Execute all tool calls in parallel
+                tool_results = await asyncio.gather(*[process_single_tool_call(tc) for tc in tool_calls])
+                
+                # Process results sequentially for UI updates
+                for i, (tool_call, tool_result) in enumerate(zip(tool_calls, tool_results)):
+                    try:
                         # Add tool result to conversation storage
                         add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
                         
@@ -761,37 +780,14 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         message_container.clear()
                         render_messages(message_container)
                         await safe_scroll_to_bottom(scroll_area, delay=0.1)
-                        
+                    
                     except Exception as e:
-                        # Handle tool call failure - add error message as tool result
-                        error_message = f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}"
-                        error_result = {
-                            'tool_call_id': tool_call['id'],
-                            'content': error_message
-                        }
-                        tool_results.append(error_result)
+                        # Fallback error handling for UI operations
+                        print(f"Error processing tool result: {str(e)}")
                         
-                        # Add error result to conversation storage
-                        
-                        add_message('tool', error_message, tool_call_id=tool_call['id'])
-                        
-                        # Verify the tool error was added correctly
-                        messages_after_error = get_messages()
-                        tool_error_found = False
-                        for msg in messages_after_error:
-                            if msg.get('role') == 'tool' and msg.get('tool_call_id') == tool_call['id']:
-                                tool_error_found = True
-                                
-                                break
-                        if not tool_error_found:
-                            pass
-                        
-                        # Update UI immediately after error
-                        message_container.clear()
-                        render_messages(message_container)
-                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
-                        
-                        print(f"Tool call error: {error_message}")
+                        # Handle error results (errors are already caught in parallel execution)
+                        if tool_result.get('_is_error', False):
+                            print(f"Tool call error: {tool_result['content']}")
                 
                 # Note: No need to add to api_messages here since they're already
                 # added to conversation storage via add_message() calls above.
@@ -972,13 +968,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                 try:
                                     tool_result = await handle_tool_call(notify_user_call_in_loop)
                                     
-                                    # IMPORTANTE: Agregar el tool result al historial para que el LLM lo vea
-                                    # (El assistant message ya fue agregado en iteraciones previas del bucle)
-                                    add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'], _is_notify_user=True)
-                                    
-                                    # ADEMÁS: Agregar mensaje del asistente con formato visual para el usuario
+                                    # Agregar mensaje del asistente con formato visual para el usuario
                                     notification_content = tool_result.get('_notification_content', tool_result['content'])
                                     add_message('assistant', notification_content)
+                                    
+                                    # Agregar confirmación del sistema para que el LLM sepa que la notificación fue exitosa
+                                    add_message('system', 'Has notificado exitosamente al usuario. No necesitas volver a notificar lo mismo. Puedes usar respond_to_user para finalizar o continuar con otras tareas.')
                                     
                                     # Update UI
                                     message_container.clear()
