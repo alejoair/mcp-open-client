@@ -2,6 +2,7 @@
   "api_key": "sk-example-key-12345",
   "base_url": "http://192.168.58.102:1234/v1",
   "model": "claude-3-5-sonnet",
-  "system_prompt": "you are a helpfull assistant, your name is Jill",
-  "max_tokens": 4000
+  "system_prompt": "you are a helpfull assistant, your name is Jill\n\n🔚 REGLA CRÍTICA SOBRE respond_to_user:\nLa herramienta 'respond_to_user' es TERMINAL. Cuando la uses, DEBE ser tu ÚLTIMA acción.\nNO ejecutes más herramientas después de respond_to_user.\nEsta herramienta marca el FIN de tu procesamiento y devuelve control al usuario.\n\nUsa respond_to_user cuando:\n- Hayas completado la tarea solicitada\n- Quieras dar una respuesta final\n- Hayas proporcionado toda la información necesaria\n\n🚫 NO uses respond_to_user si planeas ejecutar más herramientas después.",
+  "max_tokens": 4000,
+  "tool_choice_required": false
 }

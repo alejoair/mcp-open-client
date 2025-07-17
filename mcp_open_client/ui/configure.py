@@ -90,6 +90,27 @@ def show_content(container):
                 ui.icon('info').classes('mr-2 text-blue-600')
                 ui.label('El prompt del sistema define el comportamiento y personalidad del asistente. Se envía como primer mensaje en cada conversación.').classes('text-sm text-gray-600')
 
+        # Advanced Settings card
+        with ui.card().classes('w-full mb-6'):
+            with ui.row().classes('w-full items-center justify-between mb-3'):
+                with ui.row().classes('items-center'):
+                    ui.icon('settings').classes('mr-2 text-secondary')
+                    ui.label('Configuración Avanzada').classes('text-lg font-semibold')
+            
+            with ui.column().classes('w-full gap-4'):
+                # Tool Choice Required
+                ui.label('Forzar Uso de Herramientas').classes('text-sm text-gray-600')
+                
+                tool_choice_required_switch = ui.switch(
+                    text='Forzar uso de herramientas cuando estén disponibles',
+                    value=config.get('tool_choice_required', False)
+                ).classes('w-full')
+                
+                # Info tip for tool choice
+                with ui.row().classes('w-full items-center mt-2'):
+                    ui.icon('info').classes('mr-2 text-blue-600')
+                    ui.label('Cuando está activado, el LLM estará obligado a usar una herramienta en cada respuesta si hay herramientas disponibles. Útil para asegurar que el asistente siempre use las herramientas MCP cuando sea posible.').classes('text-sm text-gray-600')
+
         # Model Selection card
         with ui.card().classes('w-full mb-6'):
             with ui.row().classes('w-full items-center justify-between mb-3'):
@@ -237,10 +258,12 @@ def show_content(container):
                     api_key_input.value = current_config.get('api_key', '')
                     base_url_input.value = current_config.get('base_url', 'http://192.168.58.101:8123')
                     system_prompt_input.value = current_config.get('system_prompt', 'You are a helpful assistant.')
+                    tool_choice_required_switch.value = current_config.get('tool_choice_required', False)
                     # Force UI update
                     api_key_input.update()
                     base_url_input.update()
                     system_prompt_input.update()
+                    tool_choice_required_switch.update()
             
             # Call auto-refresh
             auto_refresh_on_load()
@@ -256,7 +279,8 @@ def show_content(container):
                     'api_key': api_key_input.value,
                     'base_url': base_url_input.value,
                     'model': model_select.value,
-                    'system_prompt': system_prompt_input.value
+                    'system_prompt': system_prompt_input.value,
+                    'tool_choice_required': tool_choice_required_switch.value
                 }
                 
                 # Update user storage - automatically persistent
@@ -287,6 +311,7 @@ def show_content(container):
                     base_url_input.value = initial_config.get('base_url', 'http://192.168.58.101:8123')
                     model_select.value = initial_config.get('model', 'claude-3-5-sonnet')
                     system_prompt_input.value = initial_config.get('system_prompt', 'You are a helpful assistant.')
+                    tool_choice_required_switch.value = initial_config.get('tool_choice_required', False)
                     
                     # Update user storage with initial configuration
                     app.storage.user['user-settings'] = initial_config
@@ -296,6 +321,7 @@ def show_content(container):
                     base_url_input.update()
                     model_select.update()
                     system_prompt_input.update()
+                    tool_choice_required_switch.update()
                     
                     # Update API client with new settings
                     api_client = get_api_client()
