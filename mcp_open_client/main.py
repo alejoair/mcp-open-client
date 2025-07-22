@@ -131,87 +131,27 @@ async def init_mcp_client():
 
 
 # Global variables
-conversations_container = None
 current_update_content_function = None
 
 def create_conversations_section():
-    """Create the conversations section in the sidebar"""
-    with ui.column().classes('w-full'):
-        ui.label('Conversations').classes('text-subtitle1 text-weight-medium q-mb-sm')
-        
-        # New conversation button
-        ui.button(
-            'New Chat',
-            icon='add',
-            on_click=lambda: create_new_conversation_and_refresh()
-        ).props('flat no-caps full-width size=sm color=primary').classes('mobile-button q-mb-sm')
-    
-        # Conversations list container - store reference globally for updates
-        global conversations_container
-        with ui.scroll_area().classes('w-full h-64') as scroll_area:
-            conversations_container = ui.column().classes('w-full')
-        populate_conversations_list(conversations_container)
-        
-        return conversations_container
+    """Create the conversations section in the sidebar using ConversationManager"""
+    from .ui.conversation_manager import conversation_manager
+    return conversation_manager.create_conversation_sidebar()
 
 def create_new_conversation_and_refresh():
     """Create a new conversation and refresh the UI"""
-    create_new_conversation()
-    refresh_conversations_list()
-    # Also refresh chat UI if callback is set
-    conversation_manager.refresh_chat_ui()
-    ui.notify('New conversation created', color='positive', position='top')
+    from .ui.conversation_manager import conversation_manager
+    conversation_manager._create_new_conversation()
 
 def refresh_conversations_list():
-    """Refresh the conversations list in the sidebar"""
-    global conversations_container
-    if conversations_container:
-        populate_conversations_list(conversations_container)
+    """Refresh the conversations list using ConversationManager"""
+    from .ui.conversation_manager import conversation_manager
+    conversation_manager.refresh_conversations_list()
 
 def populate_conversations_list(container):
-    """Populate the conversations list in the sidebar"""
-    if not container:
-        return
-        
-    container.clear()
-    
-    conversations = get_all_conversations()
-    current_id = get_current_conversation_id()
-    
-    with container:
-        if not conversations:
-            ui.label('No conversations yet').classes('text-caption text-grey-6 q-pa-sm')
-            return
-        
-        # Sort conversations by updated_at (most recent first)
-        sorted_conversations = sorted(
-            conversations.items(),
-            key=lambda x: x[1].get('updated_at', '0'),
-            reverse=True
-        )
-        
-        # Show all conversations
-        for conv_id, conv_data in sorted_conversations:
-            title = conv_data.get('title', f'Chat {conv_id[:8]}')
-            message_count = len(conv_data.get('messages', []))
-            
-            # Highlight current conversation
-            button_classes = 'drawer-btn text-left q-py-xs q-px-sm'
-            if conv_id == current_id:
-                button_classes += ' bg-blue-1 text-blue-8'
-            
-            with ui.row().classes('conversation-item w-full items-center no-wrap'):
-                # Conversation button (takes most space)
-                conv_btn = ui.button(
-                    title,
-                    on_click=lambda cid=conv_id: load_conversation_and_refresh(cid)
-                ).props('flat no-caps align-left').classes(f'{button_classes} flex-1 conversation-title')
-                
-                # Delete button (small)
-                ui.button(
-                    icon='delete_outline',
-                    on_click=lambda cid=conv_id: delete_conversation_with_confirm(cid)
-                ).props('flat round size=xs color=grey-6').classes('conversation-delete q-ml-xs')
+    """Legacy function - delegates to ConversationManager"""
+    # This function is kept for backward compatibility but delegates to ConversationManager
+    pass
 
 def load_conversation_and_refresh(conversation_id: str):
     """Load a conversation and refresh the UI"""
@@ -331,6 +271,10 @@ def setup_ui():
         # Make update_content available globally
         global current_update_content_function
         current_update_content_function = update_content
+        
+        # Configure ConversationManager callback to avoid middleware issues
+        from .ui.conversation_manager import conversation_manager
+        conversation_manager.set_update_content_callback(update_content)
 
         
         with ui.header(elevated=False).classes('app-header'):
@@ -445,7 +389,7 @@ favicon_svg = '''
 ui.run(
     title="MCP Open Client",
     storage_secret="ultrasecretkeyboard",
-    port=8090,
+    port=8091,
     reload=False,
     dark=True,
     show_welcome_message=True,

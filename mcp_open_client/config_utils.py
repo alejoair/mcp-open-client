@@ -8,7 +8,7 @@ def load_initial_config_from_files():
     
     # Load MCP configuration (only MCP servers)
     try:
-        with open('mcp_open_client/settings/mcp-config.json', 'r') as f:
+        with open('mcp_open_client/settings/mcp-config.json', 'r', encoding='utf-8') as f:
             mcp_file_config = json.load(f)
             configs_loaded['mcp-config'] = mcp_file_config
             print("Loaded MCP servers configuration from mcp-config.json")
@@ -18,7 +18,7 @@ def load_initial_config_from_files():
 
     # Load user settings (API settings) from user-settings.json
     try:
-        with open('mcp_open_client/settings/user-settings.json', 'r') as f:
+        with open('mcp_open_client/settings/user-settings.json', 'r', encoding='utf-8') as f:
             user_settings_file = json.load(f)
             configs_loaded['user-settings'] = user_settings_file
             print("Loaded user settings from user-settings.json")

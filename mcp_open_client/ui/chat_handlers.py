@@ -9,6 +9,18 @@ from mcp_open_client.meta_tools.conversation_context import inject_context_to_me
 import asyncio
 import json
 
+def _safe_delete_spinner(spinner):
+    """Safely delete spinner and return None"""
+    if spinner is not None:
+        try:
+            spinner.delete()
+        except (ValueError, AttributeError) as e:
+            # Spinner already deleted or not in parent list
+            pass
+        except Exception as e:
+            print(f"Unexpected error deleting spinner: {e}")
+    return None
+
 def _get_tool_choice_required():
     """Get tool_choice_required setting from user configuration"""
     user_settings = app.storage.user.get('user-settings', {})
@@ -48,6 +60,7 @@ def _rebuild_conversation_from_cleaned_messages(cleaned_messages):
 # Global variables
 current_conversation_id: Optional[str] = None
 stats_update_callback: Optional[callable] = None
+conversations_refresh_callback: Optional[callable] = None
 
 # Generation control variables
 generation_active = False
@@ -108,6 +121,11 @@ def set_stats_update_callback(callback: callable) -> None:
     """Set the callback function to update stats"""
     global stats_update_callback
     stats_update_callback = callback
+
+def set_conversations_refresh_callback(callback: callable) -> None:
+    """Set the callback function to refresh conversations list"""
+    global conversations_refresh_callback
+    conversations_refresh_callback = callback
 
 def get_messages(include_stats: bool = False) -> List[Dict[str, Any]] | Dict[str, Any]:
     """Get messages from current conversation
@@ -196,8 +214,8 @@ def add_message(role: str, content: str, tool_calls: Optional[List[Dict[str, Any
         # Check if conversation should be auto-renamed
         asyncio.create_task(_check_auto_rename_conversation())
 
-def find_tool_response(tool_call_id: str) -> Optional[str]:
-    """Find the tool response for a given tool call ID"""
+def find_tool_response(tool_call_id: str) -> Optional[Dict[str, Any]]:
+    """Find the tool response object for a given tool call ID"""
     messages = get_messages()
     for msg in messages:
         if (msg.get('role') == 'tool' and 
@@ -206,7 +224,7 @@ def find_tool_response(tool_call_id: str) -> Optional[str]:
             # If so, don't show the tool response since it's already shown as assistant message
             if msg.get('_is_respond_to_user') or msg.get('_is_notify_user'):
                 return None
-            return msg.get('content', '')
+            return msg  # Return the complete tool result object
     return None
 
 def render_message_to_ui(message: dict, message_container) -> None:
@@ -239,50 +257,23 @@ def render_message_to_ui(message: dict, message_container) -> None:
                     if was_truncated:
                         ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
                     
-                    # Show tool calls if present
+                    # Show tool calls if present with enhanced metadata display
                     if tool_calls:
                         ui.separator().style('margin: 0;')
+                        from .message_parser import render_tool_call_with_metadata
+                        
                         for i, tool_call in enumerate(tool_calls):
-                            function_info = tool_call.get('function', {})
-                            tool_name = function_info.get('name', 'unknown')
-                            tool_args = function_info.get('arguments', '{}')
-                            
-                            # Extract readable tool name (remove server prefix and convert underscores)
-                            display_name = tool_name
-                            if '_' in tool_name:
-                                # Split by underscore and take the last parts (actual tool name)
-                                parts = tool_name.split('_')
-                                if len(parts) > 2:  # Has server prefix like "mcp-requests_http_put"
-                                    display_name = ' '.join(parts[1:]).replace('_', ' ').upper()
-                                else:  # Simple case like "http_put"
-                                    display_name = ' '.join(parts).replace('_', ' ').upper()
-                            
                             # Find corresponding tool response
                             tool_call_id = tool_call.get('id')
                             tool_response = find_tool_response(tool_call_id) if tool_call_id else None
                             
-                            with ui.expansion(f"{display_name}",
-                                            icon=None,
-                                            value=False).classes('w-full max-w-full overflow-hidden text-sm').props('dense header-class="text-sm font-normal text-warning"').style('border-left: 4px solid var(--q-tool_call_border); background: var(--q-tool_call_bg); max-width: 100%; box-sizing: border-box; margin: 0;'):
-                                # Tool Call Section
-                                ui.label('Arguments:').classes('font-semibold').style('color: var(--q-tool_args_label);')
-                                try:
-                                    # Try to format JSON arguments nicely
-                                    formatted_args = json.dumps(json.loads(tool_args), indent=2)
-                                    ui.code(formatted_args, language='json').classes('w-full overflow-x-auto')
-                                except:
-                                    ui.code(tool_args, language='json').classes('w-full overflow-x-auto')
-                                
-                                # Tool Response Section (if available)
-                                if tool_response:
-                                    ui.separator().style('margin: 0;')
-                                    ui.label('Response:').classes('font-semibold').style('color: var(--q-tool_response_label);')
-                                    # Create a container for the tool response with controlled width
-                                    with ui.element('div').style('width: 100%; max-width: calc(100vw - 48px); overflow: hidden; box-sizing: border-box;') as response_container:
-                                        # Use parse_and_render_message to enable structured responses
-                                        parse_and_render_message(tool_response, response_container)
+                            # Use enhanced rendering with metadata
+                            render_tool_call_with_metadata(tool_call, tool_response, bot_card)
         elif role == 'tool':
             # Skip individual tool messages - they're now grouped with assistant messages
+            pass
+        elif role == 'system':
+            # Skip system messages - they're only for LLM context, not for user display
             pass
 
 def save_current_conversation() -> None:
@@ -356,19 +347,7 @@ async def safe_scroll_to_bottom(scroll_area, delay=0.2):
     except Exception as e:
         pass
 
-def render_tool_call_and_result(chat_container, tool_call, tool_result):
-    """Render tool call and result in the UI"""
-    with chat_container:
-        with ui.card().classes('w-full max-w-full mb-2 bg-yellow-100 overflow-hidden'):
-            with ui.element('div').classes('w-full max-w-full overflow-hidden p-2'):
-                ui.label('Tool Call:').classes('font-bold')
-                ui.markdown(f"**Name:** {tool_call['function']['name']}")
-                ui.code(tool_call['function']['arguments'], language='json').classes('w-full max-w-full overflow-x-auto')
-        
-        with ui.card().classes('w-full max-w-full mb-2 bg-green-100 overflow-hidden'):
-            with ui.element('div').classes('w-full max-w-full overflow-hidden p-2'):
-                ui.label('Tool Result:').classes('font-bold')
-                ui.code(json.dumps(tool_result, indent=2), language='json').classes('w-full max-w-full overflow-x-auto')
+# render_tool_call_and_result function removed - functionality integrated into render_message_to_ui
 
 async def send_message_to_mcp(message: str, server_name: str, chat_container, message_input):
     """Send message to MCP server and handle response"""
@@ -677,10 +656,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         for notify_call in notify_user_calls:
                             tool_result = await handle_tool_call(notify_call)
                             
-                            # NO agregar tool result al historial para evitar confundir al LLM
-                            # Solo agregar mensaje del asistente con formato visual para el usuario
+                            # Agregar mensaje del asistente con formato visual para el usuario
                             notification_content = tool_result.get('_notification_content', tool_result['content'])
                             add_message('assistant', notification_content)
+                            
+                            # Agregar confirmación del sistema para que el LLM sepa que la notificación fue exitosa
+                            add_message('system', 'Has notificado exitosamente al usuario. No necesitas volver a notificar lo mismo. Puedes usar respond_to_user para finalizar o continuar con otras tareas.')
                         
                         # Update UI
                         message_container.clear()
@@ -730,15 +711,30 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 render_messages(message_container)
                 await safe_scroll_to_bottom(scroll_area, delay=0.1)
                 
-                # Process each tool call with error handling
+                # Process tool calls - parallel execution for better performance
                 tool_results = []
-                for tool_call in tool_calls:
+                
+                # Create tasks for parallel execution
+                async def process_single_tool_call(tool_call):
                     try:
-                        tool_result = await handle_tool_call(tool_call)
-                        tool_results.append(tool_result)
-                        
-                        # Add tool result to conversation storage
-                        add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'])
+                        return await handle_tool_call(tool_call)
+                    except Exception as e:
+                        # Return error result in consistent format
+                        return {
+                            'tool_call_id': tool_call['id'],
+                            'content': f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}",
+                            '_is_error': True
+                        }
+                
+                # Execute all tool calls in parallel
+                tool_results = await asyncio.gather(*[process_single_tool_call(tc) for tc in tool_calls])
+                
+                # Process results sequentially for UI updates
+                for i, (tool_call, tool_result) in enumerate(zip(tool_calls, tool_results)):
+                    try:
+                        # Add tool result to conversation storage with metadata
+                        tool_metadata = tool_result.get('_tool_metadata', {})
+                        add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'], **tool_metadata)
                         
                         # ESPECIAL: Si es notify_user, agregar mensaje del asistente con el contenido de notificación
                         if tool_result.get('_is_notify_user', False):
@@ -761,37 +757,14 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         message_container.clear()
                         render_messages(message_container)
                         await safe_scroll_to_bottom(scroll_area, delay=0.1)
-                        
+                    
                     except Exception as e:
-                        # Handle tool call failure - add error message as tool result
-                        error_message = f"Error executing tool '{tool_call.get('function', {}).get('name', 'unknown')}': {str(e)}"
-                        error_result = {
-                            'tool_call_id': tool_call['id'],
-                            'content': error_message
-                        }
-                        tool_results.append(error_result)
+                        # Fallback error handling for UI operations
+                        print(f"Error processing tool result: {str(e)}")
                         
-                        # Add error result to conversation storage
-                        
-                        add_message('tool', error_message, tool_call_id=tool_call['id'])
-                        
-                        # Verify the tool error was added correctly
-                        messages_after_error = get_messages()
-                        tool_error_found = False
-                        for msg in messages_after_error:
-                            if msg.get('role') == 'tool' and msg.get('tool_call_id') == tool_call['id']:
-                                tool_error_found = True
-                                
-                                break
-                        if not tool_error_found:
-                            pass
-                        
-                        # Update UI immediately after error
-                        message_container.clear()
-                        render_messages(message_container)
-                        await safe_scroll_to_bottom(scroll_area, delay=0.1)
-                        
-                        print(f"Tool call error: {error_message}")
+                        # Handle error results (errors are already caught in parallel execution)
+                        if tool_result.get('_is_error', False):
+                            print(f"Tool call error: {tool_result['content']}")
                 
                 # Note: No need to add to api_messages here since they're already
                 # added to conversation storage via add_message() calls above.
@@ -890,10 +863,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         else:
                             response = await api_client.chat_completion(api_messages)
                         
-                        # Remove spinner after API call
-                        if 'spinner' in locals():
-                            spinner.delete()
-                            spinner = None  # Mark as deleted
+                        # Remove spinner after API call safely
+                        spinner = _safe_delete_spinner(spinner)
                         
                         # Check if stopped during API call
                         if stop_generation:
@@ -933,10 +904,11 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             respond_to_user_call_in_loop = None
                             notify_user_call_in_loop = None
                             for tool_call in tool_calls:
-                                if tool_call.get('function', {}).get('name') == 'meta-respond_to_user':
+                                tool_name = tool_call.get('function', {}).get('name')
+                                if tool_name == 'meta-respond_to_user':
                                     respond_to_user_call_in_loop = tool_call
                                     break
-                                elif tool_call.get('function', {}).get('name') == 'meta-notify_user':
+                                elif tool_name == 'meta-notify_user':
                                     notify_user_call_in_loop = tool_call
                                     break
                             
@@ -972,13 +944,12 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                                 try:
                                     tool_result = await handle_tool_call(notify_user_call_in_loop)
                                     
-                                    # IMPORTANTE: Agregar el tool result al historial para que el LLM lo vea
-                                    # (El assistant message ya fue agregado en iteraciones previas del bucle)
-                                    add_message('tool', tool_result['content'], tool_call_id=tool_result['tool_call_id'], _is_notify_user=True)
-                                    
-                                    # ADEMÁS: Agregar mensaje del asistente con formato visual para el usuario
+                                    # Agregar mensaje del asistente con formato visual para el usuario
                                     notification_content = tool_result.get('_notification_content', tool_result['content'])
                                     add_message('assistant', notification_content)
+                                    
+                                    # Agregar confirmación del sistema para que el LLM sepa que la notificación fue exitosa
+                                    add_message('system', 'Has notificado exitosamente al usuario. No necesitas volver a notificar lo mismo. Puedes usar respond_to_user para finalizar o continuar con otras tareas.')
                                     
                                     # Update UI
                                     message_container.clear()
@@ -1082,9 +1053,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                    print("No valid response received from first API call")
        
         except Exception as e:
-            # Remove spinner on error
-            if 'spinner' in locals() and spinner is not None:
-                spinner.delete()
+            # Remove spinner on error safely
+            spinner = _safe_delete_spinner(spinner if 'spinner' in locals() else None)
             
             error_message = f'Error sending message: {str(e)}'
             add_message('assistant', error_message)
@@ -1099,12 +1069,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             generation_active = False
             stop_generation = False
             
-            # Remove spinner if it still exists
-            if 'spinner' in locals() and spinner is not None:
-                try:
-                    spinner.delete()
-                except:
-                    pass
+            # Remove spinner if it still exists safely
+            spinner = _safe_delete_spinner(spinner if 'spinner' in locals() else None)
             
             # Update stats after completion
             if stats_update_callback:
@@ -1147,14 +1113,23 @@ async def _check_auto_rename_conversation():
                 conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
                 app.storage.user['conversations'] = conversations
                 
+                # Refresh conversations list and force UI update
                 try:
-                    from ..main import refresh_conversations_list
-                    refresh_conversations_list()
-                except Exception:
-                    pass
+                    from .conversation_manager import conversation_manager
+                    conversation_manager.refresh_conversations_list()
+                    
+                    # Also refresh the chat UI to update any title display
+                    conversation_manager.refresh_chat_ui()
+                    
+                    # Force a complete UI update
+                    ui.update()
+                    
+                    print(f"Auto-rename: Successfully updated UI for new title '{new_title}'")
+                except Exception as refresh_error:
+                    print(f"Warning: Could not refresh conversations list: {refresh_error}")
     
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error in auto-rename: {e}")
 
 
 def rename_conversation(conversation_id: str, new_title: str) -> bool:
@@ -1184,8 +1159,13 @@ def rename_conversation(conversation_id: str, new_title: str) -> bool:
         app.storage.user['conversations'] = conversations
         
         # Refresh conversations list in UI
-        from .conversation_manager import conversation_manager
-        conversation_manager.refresh_conversations_list()
+        try:
+            from .conversation_manager import conversation_manager
+            conversation_manager.refresh_conversations_list()
+        except Exception as e:
+            print(f"Error refreshing conversations list: {e}")
+            # Don't force reload - just skip the refresh
+            pass
         
         return True
     

@@ -10,9 +10,10 @@ from mcp_open_client.meta_tools.meta_tool import meta_tool
 from mcp_open_client.mcp_client import mcp_client_manager
 
 
+
 @meta_tool(
-    name="mcp_list_tools",
-    description="Lista todas las tools MCP disponibles y su estado de activación",
+    name="list_all_tools",
+    description="Lista TODAS las tools disponibles (MCP y Meta Tools), incluyendo las desactivadas",
     parameters_schema={
         "type": "object",
         "properties": {
@@ -20,94 +21,110 @@ from mcp_open_client.mcp_client import mcp_client_manager
                 "type": "boolean",
                 "description": "Si es true, solo muestra tools habilitadas",
                 "default": False
+            },
+            "filter_type": {
+                "type": "string",
+                "enum": ["all", "mcp", "meta"],
+                "description": "Filtrar por tipo de tool: 'all' (todas), 'mcp' (solo MCP), 'meta' (solo Meta)",
+                "default": "all"
             }
         },
         "required": []
     }
 )
-async def list_mcp_tools(show_only_enabled: bool = False):
+async def list_all_tools(show_only_enabled: bool = False, filter_type: str = "all"):
     """
-    Lista todas las tools MCP disponibles y su estado.
+    Lista TODAS las tools disponibles (MCP y Meta Tools), incluyendo las desactivadas.
     
     Args:
         show_only_enabled: Si es true, solo muestra tools habilitadas
+        filter_type: Filtrar por tipo ('all', 'mcp', 'meta')
     
     Returns:
-        Lista de tools con su estado de activación
+        Lista completa de todas las tools con su estado
     """
     from mcp_open_client.config_utils import is_tool_enabled
+    from mcp_open_client.meta_tools.meta_tool import get_registered_meta_tools
     
-    # Verificar si hay servidores MCP conectados
-    if not mcp_client_manager.is_connected():
-        return {"error": "No hay servidores MCP conectados"}
+    all_tools = []
     
-    try:
-        # Obtener todas las tools MCP disponibles
-        mcp_tools = await mcp_client_manager.list_tools()
-        active_servers = mcp_client_manager.get_active_servers()
-        
-        if not mcp_tools:
-            return {"message": "No hay tools MCP disponibles"}
-        
-        tools_info = []
-        enabled_count = 0
-        
-        for tool in mcp_tools:
-            # Handle both dict and object formats (same as get_available_tools)
-            if hasattr(tool, 'name'):
-                # FastMCP Tool object
-                full_tool_name = tool.name
-                tool_desc = tool.description
-            else:
-                # Dict format
-                full_tool_name = tool.get('name', '')
-                tool_desc = tool.get('description', '')
-            
-            # MISMA LÓGICA QUE get_available_tools(): Extraer servidor y nombre real de la tool
-            # Formato: "servidor_nombre_tool" -> servidor="servidor", tool="nombre_tool"
-            if '_' in full_tool_name:
-                # Buscar el primer _ para separar servidor del resto
-                parts = full_tool_name.split('_', 1)
-                server_name = parts[0]
-                actual_tool_name = parts[1]
-            else:
-                # Si no tiene _, asumir que no tiene prefijo de servidor
-                server_name = 'unknown'
-                actual_tool_name = full_tool_name
-            
-            # Construir tool_id usando el mismo formato que get_available_tools
-            tool_id = f"{server_name}:{actual_tool_name}"
-            is_enabled = is_tool_enabled(tool_id, 'mcp')
-            
-            if show_only_enabled and not is_enabled:
-                continue
+    # 1. Obtener Meta Tools (incluyendo las desactivadas)
+    if filter_type in ["all", "meta"]:
+        try:
+            meta_tools = get_registered_meta_tools()
+            for tool_name, tool_info in meta_tools.items():
+                is_enabled = is_tool_enabled(tool_name, 'meta')
                 
-            if is_enabled:
-                enabled_count += 1
+                if show_only_enabled and not is_enabled:
+                    continue
+                
+                all_tools.append({
+                    "tool_id": tool_name,
+                    "tipo": "meta",
+                    "nombre": tool_name,
+                    "descripcion": tool_info.get('description', 'Meta tool'),
+                    "habilitada": is_enabled
+                })
+        except Exception as e:
+            print(f"Error obteniendo meta tools: {e}")
+    
+    # 2. Obtener Tools MCP (solo si hay conexion)
+    if filter_type in ["all", "mcp"] and mcp_client_manager.is_connected():
+        try:
+            mcp_tools = await mcp_client_manager.list_tools()
             
-            tools_info.append({
-                "tool_id": tool_id,
-                "servidor": server_name,
-                "nombre": actual_tool_name,
-                "nombre_completo": full_tool_name,  # Para debugging
-                "descripcion": tool_desc[:100] + "..." if len(tool_desc) > 100 else tool_desc,
-                "habilitada": is_enabled
-            })
-        
-        # Mostrar resumen en la UI
-        ui.notify(
-            f"Tools MCP: {len(tools_info)} encontradas, {enabled_count} habilitadas",
-            color='info'
-        )
-        
-        return {
-            "total_tools": len(tools_info),
-            "tools_habilitadas": enabled_count,
-            "tools": tools_info
-        }
-        
-    except Exception as e:
-        return {"error": f"Error al obtener tools: {str(e)}"}
+            for tool in mcp_tools:
+                # Handle both dict and object formats
+                if hasattr(tool, 'name'):
+                    full_tool_name = tool.name
+                    tool_desc = tool.description
+                else:
+                    full_tool_name = tool.get('name', '')
+                    tool_desc = tool.get('description', '')
+                
+                # Extraer servidor y nombre real de la tool
+                if '_' in full_tool_name:
+                    parts = full_tool_name.split('_', 1)
+                    server_name = parts[0]
+                    actual_tool_name = parts[1]
+                else:
+                    server_name = 'unknown'
+                    actual_tool_name = full_tool_name
+                
+                tool_id = f"{server_name}:{actual_tool_name}"
+                is_enabled = is_tool_enabled(tool_id, 'mcp')
+                
+                if show_only_enabled and not is_enabled:
+                    continue
+                
+                all_tools.append({
+                    "tool_id": tool_id,
+                    "tipo": "mcp",
+                    "servidor": server_name,
+                    "nombre": actual_tool_name,
+                    "nombre_completo": full_tool_name,
+                    "descripcion": tool_desc[:100] + "..." if len(tool_desc) > 100 else tool_desc,
+                    "habilitada": is_enabled
+                })
+        except Exception as e:
+            print(f"Error obteniendo MCP tools: {e}")
+    
+    # Estadisticas
+    enabled_count = sum(1 for tool in all_tools if tool["habilitada"])
+    meta_count = sum(1 for tool in all_tools if tool["tipo"] == "meta")
+    mcp_count = sum(1 for tool in all_tools if tool["tipo"] == "mcp")
+    
+    # Incluir resumen en el resultado en lugar de usar ui.notify()
+    summary = f"Total: {len(all_tools)} tools ({meta_count} meta, {mcp_count} mcp), {enabled_count} habilitadas"
+    
+    return {
+        "total_tools": len(all_tools),
+        "meta_tools_count": meta_count,
+        "mcp_tools_count": mcp_count,
+        "tools_habilitadas": enabled_count,
+        "resumen": summary,
+        "tools": all_tools
+    }
 
 @meta_tool(
     name="mcp_toggle_tool",
@@ -154,20 +171,16 @@ def toggle_tool(tool_id: str, enabled: bool, tool_type: str):
         # Realizar el toggle
         set_tool_enabled(tool_id, enabled, tool_type)
         
-        # Mostrar notificación
+        # Incluir resultado en la respuesta
         action = "habilitada" if enabled else "deshabilitada"
-        ui.notify(
-            f"{tool_type.upper()} tool '{tool_id}' {action}",
-            color='positive'
-        )
         
         return {
             "result": f"{tool_type.upper()} tool '{tool_id}' {action} correctamente",
             "tool_id": tool_id,
             "enabled": enabled,
-            "tool_type": tool_type
+            "tool_type": tool_type,
+            "message": f"{tool_type.upper()} tool '{tool_id}' {action}"
         }
     except Exception as e:
         error_msg = f"Error al cambiar estado de la tool '{tool_id}': {str(e)}"
-        ui.notify(error_msg, color='negative')
         return {"error": error_msg}

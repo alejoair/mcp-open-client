@@ -196,6 +196,10 @@ Please retry with properly formatted JSON."""
         # Validate and clean arguments
         arguments = validate_and_clean_arguments(arguments, tool_name)
         
+        # Extract mandatory metadata fields
+        intention = arguments.pop("intention", "No especificado")
+        success_criteria = arguments.pop("success_criteria", "No especificado")
+        
         # Determine if this is a meta tool or an MCP tool
         is_meta_tool = tool_name.startswith("meta-") or f"meta-{tool_name}" in meta_tool_registry.tools
         
@@ -227,7 +231,12 @@ Please retry with properly formatted JSON."""
                                 "tool_call_id": tool_call_id,
                                 "role": "tool",
                                 "content": content,
-                                "_is_respond_to_user": True  # Flag para indicar que debe mostrar mensaje adicional
+                                "_is_respond_to_user": True,  # Flag para indicar que debe mostrar mensaje adicional
+                                "_tool_metadata": {
+                                    "intention": intention,
+                                    "success_criteria": success_criteria,
+                                    "tool_name": tool_name
+                                }
                             }
                         
                         # ESPECIAL: Si es notify_user, marcar para agregar mensaje del asistente sin terminar flujo
@@ -240,7 +249,12 @@ Please retry with properly formatted JSON."""
                                 "role": "tool",
                                 "content": "✅ Notificación enviada al usuario exitosamente.",  # Confirmación simple al LLM
                                 "_is_notify_user": True,  # Flag para indicar que debe mostrar mensaje adicional
-                                "_notification_content": content  # Contenido formateado con metadatos para mostrar al usuario
+                                "_notification_content": content,  # Contenido formateado con metadatos para mostrar al usuario
+                                "_tool_metadata": {
+                                    "intention": intention,
+                                    "success_criteria": success_criteria,
+                                    "tool_name": tool_name
+                            }
                             }
                         
                     else:
@@ -336,7 +350,12 @@ Please retry with properly formatted JSON."""
             return {
                 "tool_call_id": tool_call_id,
                 "role": "tool",
-                "content": content
+                "content": content,
+                "_tool_metadata": {
+                    "intention": intention,
+                    "success_criteria": success_criteria,
+                    "tool_name": tool_name
+                }
             }
             
         except Exception as e:
@@ -424,7 +443,7 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                 
                 # Add parameters - always provide a valid schema
                 if input_schema and isinstance(input_schema, dict):
-                    openai_tool["function"]["parameters"] = input_schema
+                    openai_tool["function"]["parameters"] = input_schema.copy()
                 else:
                     # Provide default empty schema if none available
                     openai_tool["function"]["parameters"] = {
@@ -432,6 +451,31 @@ async def get_available_tools() -> List[Dict[str, Any]]:
                         "properties": {},
                         "required": []
                     }
+                
+                # Add mandatory metadata fields to all tools
+                params = openai_tool["function"]["parameters"]
+                if "properties" not in params:
+                    params["properties"] = {}
+                if "required" not in params:
+                    params["required"] = []
+                
+                # Add intention and success_criteria as mandatory fields
+                params["properties"].update({
+                    "intention": {
+                        "type": "string",
+                        "description": "Describe qué quieres lograr con este llamado a la herramienta y por qué es necesario"
+                    },
+                    "success_criteria": {
+                        "type": "string", 
+                        "description": "Define cómo sabrás si la herramienta cumplió exitosamente su propósito"
+                    }
+                })
+                
+                # Ensure intention and success_criteria are required
+                if "intention" not in params["required"]:
+                    params["required"].append("intention")
+                if "success_criteria" not in params["required"]:
+                    params["required"].append("success_criteria")
                 
                 openai_tools.append(openai_tool)
                 
