@@ -6,6 +6,7 @@ Permite al LLM generar respuestas tipificadas con mejor presentación visual.
 from typing import Dict, Any, Optional
 from mcp_open_client.meta_tools.meta_tool import meta_tool
 from nicegui import ui
+import json
 
 # Tipos de respuesta terminales específicos para respond_to_user
 # Enfocados en finalizar conversaciones y dar respuestas definitivas
@@ -101,12 +102,18 @@ RESPONSE_TYPES = {
                 "type": "string",
                 "description": "Título opcional para la respuesta",
                 "default": None
+            },
+            "format": {
+                "type": "string",
+                "enum": ["markdown", "html"],
+                "description": "Formato de la respuesta: 'markdown' para texto normal o 'html' para contenido interactivo. Para HTML interactivo, incluye 'html_content' en metadatos con botones que tengan: data-choice attribute, onclick='sendUserChoice(valor, this)'",
+                "default": "markdown"
             }
         },
         "required": ["content"]
     }
 )
-async def respond_to_user(content: str, response_type: str = "info", title: Optional[str] = None) -> str:
+async def respond_to_user(content: str, response_type: str = "info", title: Optional[str] = None, format: str = "markdown") -> str:
     """
     Genera una respuesta estructurada al usuario.
     
@@ -114,6 +121,12 @@ async def respond_to_user(content: str, response_type: str = "info", title: Opti
         content: Contenido principal de la respuesta
         response_type: Tipo de respuesta para determinar el estilo visual
         title: Título opcional para la respuesta
+        format: Formato de la respuesta ('markdown' para texto normal o 'html' para contenido interactivo)
+               Para HTML interactivo, debe incluir 'html_content' en metadatos con botones que tengan:
+               - Atributo data-choice en cada botón
+               - Función onclick que llame sendUserChoice()
+               - Parámetros correctos en onclick: ('valor', this)
+               Ejemplo: <button data-choice onclick="sendUserChoice('Sí', this)">Sí</button>
         
     Returns:
         Respuesta formateada con metadatos para renderizado visual
@@ -122,34 +135,69 @@ async def respond_to_user(content: str, response_type: str = "info", title: Opti
     if response_type not in RESPONSE_TYPES:
         response_type = "info"
     
+    # Validar formato
+    if format not in ["markdown", "html"]:
+        format = "markdown"
+    
     # Obtener configuración del tipo
     type_config = RESPONSE_TYPES[response_type]
     icon = type_config["icon"]
     
-    # Construir respuesta formateada
-    formatted_response = content
+    # Si es formato HTML, usar metadatos interactivos
+    if format == "html":
+        # Generar ID único para esta instancia interactiva
+        import uuid
+        interaction_id = f"interactive-{str(uuid.uuid4())[:8]}"
+        
+        # Construir respuesta formateada
+        formatted_response = ""
+        
+        if title:
+            formatted_response += f"**{title}**\n\n"
+        
+        # Agregar metadatos para renderizado HTML interactivo
+        interactive_metadata = {
+            "type": "interactive_choice",
+            "interaction_id": interaction_id,
+            "html_content": content,
+            "is_interactive": True,
+            "response_type": response_type,
+            "icon": icon,
+            "background_color": type_config["background_color"],
+            "border_color": type_config["border_color"],
+            "text_color": type_config["text_color"],
+            "icon_bg": type_config["icon_bg"],
+            "is_terminal": True
+        }
+        
+        # Agregar metadatos embebidos que serán procesados por message_parser.py
+        formatted_response += f"<!-- INTERACTIVE_METADATA: {json.dumps(interactive_metadata)} -->"
+        
+        return formatted_response
     
-    if title:
-        formatted_response = f"**{title}**\n\n{content}"
-    
-    # Agregar metadatos como comentario para que la UI pueda aplicar estilos
-    response_metadata = {
-        "response_type": response_type,
-        "icon": icon,
-        "background_color": type_config["background_color"],
-        "border_color": type_config["border_color"],
-        "text_color": type_config["text_color"],
-        "icon_bg": type_config["icon_bg"],
-        "is_terminal": True  # Marca que esta es una respuesta terminal
-    }
-    
-    # Agregar metadatos embebidos que serán procesados por message_parser.py
-    formatted_response += f"\n\n<!-- RESPONSE_METADATA: {response_metadata} -->"
-    
-    
-    # Devolver respuesta formateada que será mostrada al usuario
-    # El sistema de message_parser.py se encargará de aplicar los estilos
-    return formatted_response
+    else:
+        # Formato markdown normal (comportamiento original)
+        # Construir respuesta formateada
+        formatted_response = content
+        
+        if title:
+            formatted_response = f"**{title}**\n\n{content}"
+        
+        # Agregar metadatos como comentario para que la UI pueda aplicar estilos
+        response_metadata = {
+            "response_type": response_type,
+            "icon": icon,
+            "background_color": type_config["background_color"],
+            "border_color": type_config["border_color"],
+            "text_color": type_config["text_color"],
+            "icon_bg": type_config["icon_bg"],
+            "is_terminal": True  # Marca que esta es una respuesta terminal
+        }
+        
+        # Agregar metadatos embebidos que serán procesados por message_parser.py
+        formatted_response += f"\n\n<!-- RESPONSE_METADATA: {response_metadata} -->"
+        
+        return formatted_response
 
 def get_response_types() -> Dict[str, Dict[str, Any]]:
     """

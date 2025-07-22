@@ -37,29 +37,65 @@ class ConversationTitleManager:
         max_length = max_length or self.max_title_length
         
         try:
-            user_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant']]
+            # Include user, assistant, and tool messages (tool calls contain actual LLM responses)
+            relevant_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant', 'tool']]
             
-            if not user_messages:
+            if not relevant_messages:
                 return "New Conversation"
             
-            sample_messages = user_messages[:6]
+            sample_messages = relevant_messages[:6]
+            
+            # Build context from multiple messages for better title generation
+            context_text = ""
+            for i, msg in enumerate(sample_messages[:3]):
+                role = msg.get('role', 'unknown')
+                content = msg.get('content') or ''  # Handle None content
+                content = str(content)[:150]  # Ensure it's a string and slice
+                context_text += f"{role}: {content}\n"
             
             response = await self.api_client.chat_completion(
                 messages=[{
+                    "role": "system",
+                    "content": "You are a title generator. Generate ONLY a short, descriptive title (2-6 words) for the conversation. Do not include quotes, prefixes, or explanations. Just return the title."
+                }, {
                     "role": "user",
-                    "content": f"Generate a short title for this conversation. First message: {sample_messages[0].get('content', '')[:100] if sample_messages else ''}"
+                    "content": f"Generate a title for this conversation:\n\n{context_text.strip()}"
                 }]
             )
             
             if response and 'choices' in response and response['choices']:
                 title = response['choices'][0]['message']['content'].strip()
-                
+                # Remove quotes, periods, and slashes
                 title = title.strip('"\'.\\/').strip()
                 
-                prefixes_to_remove = ["Title:", "title:", "TITLE:", "Conversation:", "conversation:"]
+                # Remove common prefixes and phrases
+                prefixes_to_remove = [
+                    "Title:", "title:", "TITLE:", 
+                    "Conversation:", "conversation:", "CONVERSATION:",
+                    "Here's a title:", "Here is a title:",
+                    "A good title would be:", "The title could be:",
+                    "I suggest:", "How about:"
+                ]
                 for prefix in prefixes_to_remove:
-                    if title.startswith(prefix):
+                    if title.lower().startswith(prefix.lower()):
                         title = title[len(prefix):].strip()
+                
+                # Take only the first line (in case of multi-line response)
+                title = title.split('\n')[0].strip()
+                
+                # Remove any remaining quotes
+                title = title.strip('"\'')
+                
+                # Remove Markdown formatting (**, *, _, etc.)
+                title = title.replace('**', '').replace('*', '').replace('_', '').replace('`', '')
+                
+                # Remove colons at the end (common in LLM responses)
+                title = title.rstrip(':')
+                
+                # Clean up extra spaces
+                title = ' '.join(title.split())
+                
+                print(f"Auto-rename: Generated title '{title}' for conversation")
                 
                 if len(title) > max_length:
                     title = title[:max_length-3] + "..."
@@ -68,7 +104,10 @@ class ConversationTitleManager:
             
             return "Conversation"
             
-        except Exception:
+        except Exception as e:
+            print(f"Error generating conversation title: {e}")
+            import traceback
+            traceback.print_exc()
             return "Conversation"
     
     def should_auto_rename(self, messages: List[Dict[str, Any]]) -> bool:
@@ -80,8 +119,9 @@ class ConversationTitleManager:
         Returns:
             True if the conversation should be auto-renamed
         """
-        user_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant']]
-        return len(user_messages) >= self.trigger_message_count
+        # Count user, assistant, and tool messages (tool calls contain actual LLM responses)
+        relevant_messages = [msg for msg in messages if msg.get('role') in ['user', 'assistant', 'tool']]
+        return len(relevant_messages) >= self.trigger_message_count
     
     def validate_title(self, title: str, max_length: Optional[int] = None) -> str:
         """Validate and clean up a conversation title.
