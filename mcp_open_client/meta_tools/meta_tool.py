@@ -39,6 +39,10 @@ class MetaToolRegistry:
         if not is_tool_enabled(tool_name, 'meta'):
             return {"error": f"Meta tool '{tool_name}' is disabled"}
         
+        # Extraer metadata obligatoria
+        intention = params.pop("intention", "No especificado")
+        success_criteria = params.pop("success_criteria", "No especificado")
+        
         try:
             func = self.tools[tool_name]
             # Verificar si la función es asíncrona
@@ -48,7 +52,15 @@ class MetaToolRegistry:
                 result = func(**params)
             
             # Formatear el resultado para que sea compatible con el formato de tool call
-            return {"result": result}
+            # Incluir metadata en el resultado
+            return {
+                "result": result,
+                "_tool_metadata": {
+                    "intention": intention,
+                    "success_criteria": success_criteria,
+                    "tool_name": tool_name
+                }
+            }
         except Exception as e:
             return {"error": f"Error executing meta tool '{tool_name}': {str(e)}"}
     
@@ -60,12 +72,37 @@ class MetaToolRegistry:
         for name, schema in self.tool_schemas.items():
             # Solo incluir la tool si está habilitada
             if is_tool_enabled(name, 'meta'):
+                # Agregar campos obligatorios de metadata
+                enhanced_params = schema["parameters"].copy()
+                if "properties" not in enhanced_params:
+                    enhanced_params["properties"] = {}
+                if "required" not in enhanced_params:
+                    enhanced_params["required"] = []
+                
+                # Agregar intention y success_criteria como campos obligatorios
+                enhanced_params["properties"].update({
+                    "intention": {
+                        "type": "string",
+                        "description": "Describe qué quieres lograr con este meta tool y por qué es necesario"
+                    },
+                    "success_criteria": {
+                        "type": "string", 
+                        "description": "Define cómo sabrás si el meta tool cumplió exitosamente su propósito"
+                    }
+                })
+                
+                # Asegurar que intention y success_criteria sean obligatorios
+                if "intention" not in enhanced_params["required"]:
+                    enhanced_params["required"].append("intention")
+                if "success_criteria" not in enhanced_params["required"]:
+                    enhanced_params["required"].append("success_criteria")
+                
                 tools.append({
                     "type": "function",
                     "function": {
                         "name": name,
                         "description": schema["description"],
-                        "parameters": schema["parameters"]
+                        "parameters": enhanced_params
                     }
                 })
         return tools

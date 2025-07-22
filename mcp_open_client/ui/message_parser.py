@@ -149,3 +149,88 @@ def parse_and_render_message(message: str, container) -> None:
             text_after = message[last_end:].strip()
             if text_after:
                 ui.markdown(text_after)
+
+def render_tool_call_with_metadata(tool_call, tool_result=None, container=None):
+    """
+    Render a tool call with metadata in an enhanced UI format.
+    
+    Args:
+        tool_call: Tool call object with function name and arguments
+        tool_result: Optional tool result object
+        container: UI container to render in (optional)
+    """
+    def render_content():
+        # Extract tool information
+        function_info = tool_call.get('function', {})
+        tool_name = function_info.get('name', 'Unknown Tool')
+        arguments_str = function_info.get('arguments', '{}')
+        
+        try:
+            arguments = json.loads(arguments_str)
+        except json.JSONDecodeError:
+            arguments = {}
+        
+        # Extract metadata from arguments or tool result
+        intention = arguments.get('intention', tool_call.get('_intention', 'No especificado'))
+        success_criteria = arguments.get('success_criteria', tool_call.get('_success_criteria', 'No especificado'))
+        
+        # If tool_result has metadata, use that instead
+        if tool_result and '_tool_metadata' in tool_result:
+            metadata = tool_result['_tool_metadata']
+            intention = metadata.get('intention', intention)
+            success_criteria = metadata.get('success_criteria', success_criteria)
+            tool_name = metadata.get('tool_name', tool_name)
+        
+        # Tool call container (integrated, no card)
+        with ui.column().classes('border-l-4 border-blue-300 bg-blue-50/30 pl-4 pr-2 py-3 mb-2 w-full rounded-r'):
+            # Header with tool name (more integrated)
+            with ui.row().classes('w-full items-center mb-2'):
+                ui.icon('build').classes('text-blue-600 mr-2 text-sm')
+                ui.label(f'Tool: {tool_name}').classes('font-semibold text-blue-700 text-sm')
+            
+            # Content area (more compact)
+            with ui.column().classes('space-y-2'):
+                # Intention section (more integrated)
+                with ui.row().classes('w-full'):
+                    ui.label('Intención:').classes('font-medium text-blue-700 text-sm min-w-[100px]')
+                    ui.label(intention).classes('text-gray-700 text-sm flex-1')
+                
+                # Success criteria section (more integrated)
+                with ui.row().classes('w-full'):
+                    ui.label('Criterio:').classes('font-medium text-blue-700 text-sm min-w-[100px]')
+                    ui.label(success_criteria).classes('text-gray-700 text-sm flex-1')
+                
+                # Arguments and Result sections (more compact)
+                details_row = ui.row().classes('w-full gap-2 mt-2')
+                with details_row:
+                    # Arguments section (compact)
+                    if arguments:
+                        # Filter out metadata fields for display
+                        display_args = {k: v for k, v in arguments.items() 
+                                      if k not in ['intention', 'success_criteria']}
+                        if display_args:
+                            with ui.expansion('Args', icon='code').classes('flex-1').props('dense'):
+                                ui.code(json.dumps(display_args, indent=2, ensure_ascii=False)).classes('text-xs w-full')
+                    
+                    # Result section (compact, formatted like args)
+                    if tool_result:
+                        result_content = tool_result.get('content', str(tool_result))
+                        with ui.expansion('Resultado', icon='check_circle').classes('flex-1').props('dense'):
+                            # Format result as JSON-like for consistency with args
+                            try:
+                                # Try to parse as JSON first
+                                if result_content.strip().startswith(('{', '[')):
+                                    parsed_result = json.loads(result_content)
+                                    ui.code(json.dumps(parsed_result, indent=2, ensure_ascii=False)).classes('text-xs w-full')
+                                else:
+                                    # If not JSON, format as simple string in code block
+                                    ui.code(result_content).classes('text-xs w-full')
+                            except (json.JSONDecodeError, AttributeError):
+                                # Fallback: show as code block (consistent with args formatting)
+                                ui.code(str(result_content)).classes('text-xs w-full')
+    
+    if container:
+        with container:
+            render_content()
+    else:
+        render_content()
