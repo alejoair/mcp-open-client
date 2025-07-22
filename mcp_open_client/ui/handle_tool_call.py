@@ -254,7 +254,7 @@ Please retry with properly formatted JSON."""
                                     "intention": intention,
                                     "success_criteria": success_criteria,
                                     "tool_name": tool_name
-                                }
+                            }
                             }
                         
                     else:

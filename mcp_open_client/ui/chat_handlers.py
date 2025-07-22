@@ -9,6 +9,18 @@ from mcp_open_client.meta_tools.conversation_context import inject_context_to_me
 import asyncio
 import json
 
+def _safe_delete_spinner(spinner):
+    """Safely delete spinner and return None"""
+    if spinner is not None:
+        try:
+            spinner.delete()
+        except (ValueError, AttributeError) as e:
+            # Spinner already deleted or not in parent list
+            pass
+        except Exception as e:
+            print(f"Unexpected error deleting spinner: {e}")
+    return None
+
 def _get_tool_choice_required():
     """Get tool_choice_required setting from user configuration"""
     user_settings = app.storage.user.get('user-settings', {})
@@ -851,10 +863,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                         else:
                             response = await api_client.chat_completion(api_messages)
                         
-                        # Remove spinner after API call
-                        if 'spinner' in locals():
-                            spinner.delete()
-                            spinner = None  # Mark as deleted
+                        # Remove spinner after API call safely
+                        spinner = _safe_delete_spinner(spinner)
                         
                         # Check if stopped during API call
                         if stop_generation:
@@ -894,10 +904,11 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             respond_to_user_call_in_loop = None
                             notify_user_call_in_loop = None
                             for tool_call in tool_calls:
-                                if tool_call.get('function', {}).get('name') == 'meta-respond_to_user':
+                                tool_name = tool_call.get('function', {}).get('name')
+                                if tool_name == 'meta-respond_to_user':
                                     respond_to_user_call_in_loop = tool_call
                                     break
-                                elif tool_call.get('function', {}).get('name') == 'meta-notify_user':
+                                elif tool_name == 'meta-notify_user':
                                     notify_user_call_in_loop = tool_call
                                     break
                             
@@ -1042,9 +1053,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                    print("No valid response received from first API call")
        
         except Exception as e:
-            # Remove spinner on error
-            if 'spinner' in locals() and spinner is not None:
-                spinner.delete()
+            # Remove spinner on error safely
+            spinner = _safe_delete_spinner(spinner if 'spinner' in locals() else None)
             
             error_message = f'Error sending message: {str(e)}'
             add_message('assistant', error_message)
@@ -1059,12 +1069,8 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             generation_active = False
             stop_generation = False
             
-            # Remove spinner if it still exists
-            if 'spinner' in locals() and spinner is not None:
-                try:
-                    spinner.delete()
-                except:
-                    pass
+            # Remove spinner if it still exists safely
+            spinner = _safe_delete_spinner(spinner if 'spinner' in locals() else None)
             
             # Update stats after completion
             if stats_update_callback:

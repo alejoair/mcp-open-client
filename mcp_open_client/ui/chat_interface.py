@@ -91,6 +91,7 @@ def create_chat_interface(container):
                 with ui.row().classes('w-full items-center shrink-0 input-row'):
                     text_input = ui.textarea(placeholder='Type your message...').props('outlined autogrow input-style="max-height: 80px;"').classes('flex-grow rounded-lg chat-input-field')
                     
+                    
                     # Create async wrapper functions for the event handlers
                     async def send_message():
                         global generation_active, stop_generation
@@ -140,7 +141,130 @@ def create_chat_interface(container):
                     
                     text_input.on('keydown.enter', handle_enter)
                     
-
+                    # Setup JavaScript for interactive choice integration using ui.run_javascript
+                    ui.run_javascript('''
+                    // Enhanced function to send messages from interactive elements to chat
+                    window.sendMessageToChat = function(message) {
+                        console.log('sendMessageToChat called with:', message);
+                        
+                        // Multiple strategies to find the textarea
+                        let textInput = null;
+                        let sendButton = null;
+                        
+                        // Strategy 1: Find by placeholder text
+                        const textareas = document.querySelectorAll('textarea');
+                        for (let textarea of textareas) {
+                            if (textarea.placeholder && textarea.placeholder.includes('message') && 
+                                textarea.offsetParent !== null && !textarea.disabled) {
+                                textInput = textarea;
+                                break;
+                            }
+                        }
+                        
+                        // Strategy 2: Find by class if first strategy fails
+                        if (!textInput) {
+                            const inputByClass = document.querySelector('textarea.chat-input-field');
+                            if (inputByClass && inputByClass.offsetParent !== null && !inputByClass.disabled) {
+                                textInput = inputByClass;
+                            }
+                        }
+                        
+                        // Strategy 3: Find any visible textarea as fallback
+                        if (!textInput) {
+                            for (let textarea of textareas) {
+                                if (textarea.offsetParent !== null && !textarea.disabled) {
+                                    textInput = textarea;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Multiple strategies to find the send button
+                        // Strategy 1: Find by icon content
+                        const allButtons = document.querySelectorAll('button');
+                        for (let button of allButtons) {
+                            const icon = button.querySelector('i');
+                            if (icon && (icon.textContent.includes('send') || icon.textContent.includes('arrow_forward'))) {
+                                sendButton = button;
+                                break;
+                            }
+                        }
+                        
+                        // Strategy 2: Find by button properties or attributes
+                        if (!sendButton) {
+                            const buttons = document.querySelectorAll('button[color="primary"], button.send-button');
+                            for (let button of buttons) {
+                                if (button.offsetParent !== null && !button.disabled) {
+                                    sendButton = button;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (textInput && sendButton) {
+                            console.log('Found input and button, sending message:', message);
+                            
+                            // Clear current value and set new message
+                            textInput.value = '';
+                            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Set the new message
+                            textInput.value = message;
+                            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Trigger change event for NiceGUI binding
+                            textInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            // Click the send button after a small delay
+                            setTimeout(() => {
+                                if (!sendButton.disabled) {
+                                    sendButton.click();
+                                    console.log('Send button clicked successfully');
+                                } else {
+                                    console.warn('Send button is disabled');
+                                }
+                            }, 150);
+                        } else {
+                            console.error('Could not find chat input or send button');
+                            console.log('textInput:', textInput);
+                            console.log('sendButton:', sendButton);
+                            console.log('Available textareas:', document.querySelectorAll('textarea'));
+                            console.log('Available buttons:', document.querySelectorAll('button'));
+            
+            // Mostrar error al usuario
+            const errorNotification = document.createElement('div');
+            errorNotification.textContent = 'Error: No se pudo enviar el mensaje. Elementos de chat no encontrados.';
+            errorNotification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #ef4444;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 10000;
+                font-family: system-ui, -apple-system, sans-serif;
+            `;
+            document.body.appendChild(errorNotification);
+            
+            // Remove error notification after 5 seconds
+            setTimeout(() => {
+                if (errorNotification.parentNode) {
+                    errorNotification.parentNode.removeChild(errorNotification);
+                }
+            }, 5000);
+        }
+    };
+                    
+                    // Debug function to help troubleshoot
+                    window.debugChatElements = function() {
+                        console.log('=== Chat Elements Debug ===');
+                        console.log('Textareas:', document.querySelectorAll('textarea'));
+                        console.log('Buttons:', document.querySelectorAll('button'));
+                        console.log('Icons:', document.querySelectorAll('i'));
+                    };
+                    ''')
 
 def load_conversation_messages(message_container):
     """Load messages from the current conversation"""

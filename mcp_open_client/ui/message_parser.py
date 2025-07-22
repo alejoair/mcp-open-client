@@ -46,6 +46,10 @@ def is_structured_response(content: str) -> bool:
     """Check if content contains structured response metadata."""
     return "<!-- RESPONSE_METADATA:" in content
 
+def is_interactive_response(content: str) -> bool:
+    """Check if content contains interactive HTML metadata."""
+    return "<!-- INTERACTIVE_METADATA:" in content
+
 def extract_response_metadata(content: str):
     """Extract metadata from structured response."""
     if not is_structured_response(content):
@@ -64,6 +68,30 @@ def extract_response_metadata(content: str):
             return json.loads(metadata_str)
         except json.JSONDecodeError:
             return None
+    return None
+
+def extract_interactive_metadata(content: str):
+    """Extract metadata from interactive HTML response."""
+    if not is_interactive_response(content):
+        return None
+    
+    pattern = r'<!-- INTERACTIVE_METADATA: (.+?) -->'
+    match = re.search(pattern, content)
+    
+    if match:
+        try:
+            metadata_str = match.group(1)
+            return json.loads(metadata_str)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+def clean_interactive_content(content: str) -> str:
+    """Remove interactive metadata comments from content."""
+    pattern = r'<!-- INTERACTIVE_METADATA: .*? -->'
+    cleaned = re.sub(pattern, '', content)
+    return cleaned.strip()
+
     
     return None
 
@@ -117,6 +145,16 @@ def parse_and_render_message(message: str, container) -> None:
         container: The UI container to add elements to
     """
     if not message or not message.strip():
+        return
+    
+    # Check if this is an interactive HTML response
+    interactive_metadata = extract_interactive_metadata(message)
+    if interactive_metadata:
+        # Clean the message content by removing metadata comments
+        message = clean_interactive_content(message)
+        
+        # Render the interactive HTML
+        render_interactive_html(container, interactive_metadata, message)
         return
     
     # Check if this is a structured response with metadata
@@ -274,3 +312,116 @@ def render_tool_call_with_metadata(tool_call, tool_result=None, container=None):
             render_content()
     else:
         render_content()
+
+def render_interactive_html(container, metadata: dict, message: str):
+    """Render interactive HTML with click handlers that send user choices back to chat.
+    
+    Note: This function depends on window.sendMessageToChat being defined by chat_interface.py
+    """
+    interaction_id = metadata.get('interaction_id', 'unknown')
+    html_content = metadata.get('html_content', '')
+    
+    # Remove any script tags from html_content
+    clean_html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    
+    with container:
+        # Render the message text first (if any)
+        if message and message.strip():
+            ui.markdown(message)
+        
+        # Define JavaScript function for handling user choices - SINGLE DEFINITION
+        ui.run_javascript('''
+            window.sendUserChoice = function(choice, buttonElement) {
+                console.log('🚀 INICIO CLICK - sendUserChoice ejecutándose!');
+                console.log('📋 Parámetros recibidos:', {choice: choice, buttonElement: buttonElement});
+                console.log('🔵 sendUserChoice llamada con:', choice);
+                console.log('🔵 Elemento del botón:', buttonElement);
+                
+                // Disable all choice buttons to prevent multiple selections
+                const choiceButtons = document.querySelectorAll('[data-choice]');
+                console.log('🔵 Botones encontrados:', choiceButtons.length);
+                choiceButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';
+                });
+                
+                // Highlight selected button
+                buttonElement.style.backgroundColor = '#10b981';
+                buttonElement.style.borderColor = '#10b981';
+                buttonElement.innerHTML = '✓ ' + choice;
+                console.log('🔵 Botón actualizado visualmente');
+                
+                // Usar sendMessageToChat como mecanismo principal
+                if (window.sendMessageToChat) {
+                    console.log('✅ sendMessageToChat disponible, enviando:', choice);
+                    
+                    // Llamar a sendMessageToChat y agregar logs para debug
+                    try {
+                        console.log('🔵 Llamando a sendMessageToChat...');
+                        const result = window.sendMessageToChat(choice);
+                        console.log('🟢 sendMessageToChat ejecutado sin errores, resultado:', result);
+                    } catch (error) {
+                        console.error('🔴 Error al ejecutar sendMessageToChat:', error);
+                        console.error('🔴 Stack trace:', error.stack);
+                        alert('Error específico: ' + error.message);
+                    }
+                    
+                    // Mostrar una breve notificación al usuario
+                    const notification = document.createElement('div');
+                    notification.textContent = 'Enviando: ' + choice;
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #10b981;
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                        z-index: 10000;
+                        font-family: system-ui, -apple-system, sans-serif;
+                    `;
+                    document.body.appendChild(notification);
+                    
+                    // Eliminar la notificación después de 1 segundo
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 1000);
+                } else {
+                    console.error('❌ No se encontró mecanismo para enviar mensaje');
+                    console.log('🔵 window.sendMessageToChat existe?', typeof window.sendMessageToChat);
+                    
+                    // Mostrar una notificación de error
+                    const notification = document.createElement('div');
+                    notification.textContent = 'Error: No se pudo enviar el mensaje';
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #ef4444;
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                        z-index: 10000;
+                        font-family: system-ui, -apple-system, sans-serif;
+                    `;
+                    document.body.appendChild(notification);
+                    
+                    // Eliminar la notificación después de 3 segundos
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 3000);
+                }
+            };
+            
+            console.log('🟡 sendUserChoice definida, tipo:', typeof window.sendUserChoice);
+            console.log('🟡 window.sendMessageToChat existe?', typeof window.sendMessageToChat);
+        ''')        
+        
+        # Render the interactive HTML without script tags
+        ui.html(clean_html_content).classes('interactive-choice w-full')

@@ -415,11 +415,7 @@ def add_context_item(content: str, id: str = None) -> Dict[str, Any]:
         
         _set_context_items(items)
         
-        ui.notify(
-            f"Elemento agregado al contexto: {id}",
-            color='positive',
-            position='bottom-right'
-        )
+        # Contexto actualizado - la notificación se maneja en el cliente
         
         return {
             "result": f"Elemento agregado correctamente con ID '{id}'",
@@ -470,11 +466,7 @@ def update_context_item(id: str, content: str) -> Dict[str, Any]:
                 
                 _set_context_items(items)
                 
-                ui.notify(
-                    f"Elemento del contexto actualizado: {id}",
-                    color='positive',
-                    position='bottom-right'
-                )
+                # Contexto actualizado - la notificación se maneja en el cliente
                 
                 return {
                     "result": f"Elemento '{id}' actualizado correctamente",
@@ -520,11 +512,7 @@ def remove_context_item(id: str) -> Dict[str, Any]:
                 
                 _set_context_items(items)
                 
-                ui.notify(
-                    f"Elemento eliminado del contexto: {id}",
-                    color='info',
-                    position='bottom-right'
-                )
+                # Contexto actualizado - la notificación se maneja en el cliente
                 
                 return {
                     "result": f"Elemento '{id}' eliminado correctamente",
@@ -536,49 +524,5 @@ def remove_context_item(id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error al eliminar elemento del contexto: {str(e)}")
         return {"error": f"Error al eliminar elemento: {str(e)}"}
-
-@meta_tool(
-    name="conversation_context_list_items",
-    description="Lista todos los elementos del contexto actual",
-    parameters_schema={
-        "type": "object",
-        "properties": {},
-        "required": []
-    }
-)
-def list_context_items() -> Dict[str, Any]:
-    """
-    Lista todos los elementos del contexto actual.
-    
-    Returns:
-        Diccionario con la lista de elementos
-    """
-    try:
-        items = _get_context_items()
-        
-        if not items:
-            return {
-                "result": "No hay elementos en el contexto",
-                "items": [],
-                "total_items": 0
-            }
-        
-        formatted_items = []
-        for i, item in enumerate(items, 1):
-            formatted_items.append({
-                "index": i,
-                "id": item.get('id', 'sin-id'),
-                "content": item.get('content', ''),
-                "timestamp": item.get('timestamp', '')
-            })
-        
-        return {
-            "result": f"Contexto contiene {len(items)} elemento(s)",
-            "items": formatted_items,
-            "total_items": len(items)
-        }
-    except Exception as e:
-        logger.error(f"Error al listar elementos del contexto: {str(e)}")
-        return {"error": f"Error al listar elementos: {str(e)}"}
 
 
