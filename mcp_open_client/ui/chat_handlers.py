@@ -48,6 +48,7 @@ def _rebuild_conversation_from_cleaned_messages(cleaned_messages):
 # Global variables
 current_conversation_id: Optional[str] = None
 stats_update_callback: Optional[callable] = None
+conversations_refresh_callback: Optional[callable] = None
 
 # Generation control variables
 generation_active = False
@@ -108,6 +109,11 @@ def set_stats_update_callback(callback: callable) -> None:
     """Set the callback function to update stats"""
     global stats_update_callback
     stats_update_callback = callback
+
+def set_conversations_refresh_callback(callback: callable) -> None:
+    """Set the callback function to refresh conversations list"""
+    global conversations_refresh_callback
+    conversations_refresh_callback = callback
 
 def get_messages(include_stats: bool = False) -> List[Dict[str, Any]] | Dict[str, Any]:
     """Get messages from current conversation
@@ -1101,14 +1107,23 @@ async def _check_auto_rename_conversation():
                 conversations[current_conversation_id]['updated_at'] = str(uuid.uuid1().time)
                 app.storage.user['conversations'] = conversations
                 
+                # Refresh conversations list and force UI update
                 try:
-                    from ..main import refresh_conversations_list
-                    refresh_conversations_list()
-                except Exception:
-                    pass
+                    from .conversation_manager import conversation_manager
+                    conversation_manager.refresh_conversations_list()
+                    
+                    # Also refresh the chat UI to update any title display
+                    conversation_manager.refresh_chat_ui()
+                    
+                    # Force a complete UI update
+                    ui.update()
+                    
+                    print(f"Auto-rename: Successfully updated UI for new title '{new_title}'")
+                except Exception as refresh_error:
+                    print(f"Warning: Could not refresh conversations list: {refresh_error}")
     
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error in auto-rename: {e}")
 
 
 def rename_conversation(conversation_id: str, new_title: str) -> bool:
@@ -1138,8 +1153,13 @@ def rename_conversation(conversation_id: str, new_title: str) -> bool:
         app.storage.user['conversations'] = conversations
         
         # Refresh conversations list in UI
-        from .conversation_manager import conversation_manager
-        conversation_manager.refresh_conversations_list()
+        try:
+            from .conversation_manager import conversation_manager
+            conversation_manager.refresh_conversations_list()
+        except Exception as e:
+            print(f"Error refreshing conversations list: {e}")
+            # Don't force reload - just skip the refresh
+            pass
         
         return True
     

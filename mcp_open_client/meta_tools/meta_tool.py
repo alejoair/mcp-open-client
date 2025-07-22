@@ -119,5 +119,9 @@ def meta_tool(name: str, description: str, parameters_schema: Dict[str, Any]):
         return func
     return decorator
 
+def get_registered_meta_tools() -> Dict[str, Dict[str, Any]]:
+    """Obtener todas las meta tools registradas (incluyendo las desactivadas)."""
+    return meta_tool_registry.tool_schemas
+
 # Instancia global del registro de meta tools
 meta_tool_registry = MetaToolRegistry()

@@ -10,10 +10,15 @@ class ConversationManager:
     def __init__(self):
         self._refresh_chat_callback: Optional[Callable] = None
         self._conversations_container: Optional[ui.column] = None
+        self._update_content_callback: Optional[Callable] = None
     
     def set_refresh_callback(self, callback: Callable):
         """Set the callback function to refresh chat UI"""
         self._refresh_chat_callback = callback
+    
+    def set_update_content_callback(self, callback: Callable):
+        """Set the callback function to update content view"""
+        self._update_content_callback = callback
     
     def refresh_chat_ui(self):
         """Refresh the chat UI - SYNC ONLY to preserve UI context"""
@@ -26,10 +31,26 @@ class ConversationManager:
         print(f"Debug: refresh_conversations_list called, container exists: {self._conversations_container is not None}")
         if self._conversations_container:
             print("Debug: Clearing and repopulating conversations list")
-            self._conversations_container.clear()
-            self._populate_conversations_list()
+            try:
+                self._conversations_container.clear()
+                self._populate_conversations_list()
+                # Force UI update
+                ui.update()
+            except Exception as e:
+                print(f"Error refreshing conversations container: {e}")
+                raise
         else:
-            print("Debug: No conversations container found, cannot refresh")
+            print("Debug: No conversations container found, skipping refresh")
+            # Don't force reload when showing dialogs - just skip the refresh
+            # The container will be available once the dialog closes
+    
+    def _safe_refresh_after_delete(self):
+        """Safely refresh UI after deleting a conversation"""
+        try:
+            self.refresh_conversations_list()
+            self.refresh_chat_ui()
+        except Exception as e:
+            print(f"Error during post-delete refresh: {e}")
     
     def _populate_conversations_list(self):
         """Populate the conversations list"""
@@ -63,14 +84,14 @@ class ConversationManager:
                 with ui.card().classes(card_classes) as conv_card:
                     with ui.row().classes('w-full items-center justify-between'):
                         with ui.column().classes('flex-1'):
-                            ui.label(title).classes('font-medium text-sm')
+                            ui.markdown(title).classes('font-medium text-sm')
                             ui.label(f'{message_count} messages').classes('text-xs text-gray-500')
                         
                         # Delete button
                         delete_btn = ui.button(
-                            icon='delete',
-                            on_click=lambda conv_id=conv_id: self._delete_conversation(conv_id)
+                            icon='delete'
                         ).props('flat round size=sm color=red').classes('ml-2')
+                        delete_btn.on('click.stop', lambda conv_id=conv_id: self._delete_conversation(conv_id))
                     
                     # Click to load conversation
                     conv_card.on('click', lambda conv_id=conv_id: self._load_conversation(conv_id))
@@ -81,17 +102,23 @@ class ConversationManager:
         self.refresh_conversations_list()
         self.refresh_chat_ui()
         # Switch to chat view automatically
-        from mcp_open_client.main import current_update_content_function
-        if current_update_content_function:
-            current_update_content_function('chat')
+        if self._update_content_callback:
+            self._update_content_callback('chat')
     
     def _delete_conversation(self, conversation_id: str):
         """Delete a conversation with confirmation"""
         def confirm_delete():
-            delete_conversation(conversation_id)
-            self.refresh_conversations_list()
-            self.refresh_chat_ui()
-            dialog.close()
+            try:
+                delete_conversation(conversation_id)
+                dialog.close()
+                
+                # Defer the UI refresh to avoid conflicts with dialog closing
+                ui.timer(0.1, lambda: self._safe_refresh_after_delete(), once=True)
+                
+                ui.notify('Conversation deleted', color='positive', position='top')
+            except Exception as e:
+                print(f"Error deleting conversation: {e}")
+                ui.notify('Error deleting conversation', color='negative', position='top')
         
         def cancel_delete():
             dialog.close()

@@ -271,104 +271,6 @@ def _insert_context_message_before_last_user(messages, context_message):
         # Si no hay mensajes de usuario, insertar al final
         messages.append(context_message)
 
-@meta_tool(
-    name="conversation_context_add",
-    description="Agrega información al contexto de la conversación actual",
-    parameters_schema={
-        "type": "object",
-        "properties": {
-            "content": {
-                "type": "string",
-                "description": "Contenido a agregar al contexto de la conversación"
-            },
-            "replace": {
-                "type": "boolean",
-                "description": "Si es True, reemplaza el contexto actual en lugar de agregarlo",
-                "default": False
-            }
-        },
-        "required": ["content"]
-    }
-)
-def add_to_context(content: str, replace: bool = False) -> Dict[str, Any]:
-    """
-    Agrega información al contexto de la conversación.
-    
-    Args:
-        content: Texto a agregar al contexto
-        replace: Si es True, reemplaza el contexto actual en vez de agregarlo
-        
-    Returns:
-        Diccionario con el resultado de la operación
-    """
-    try:
-        items = _get_context_items()
-        
-        if replace:
-            # Reemplazar todo el contexto con un solo elemento
-            items = [{
-                "id": f"item-{str(uuid.uuid4())[:8]}",
-                "content": content,
-                "timestamp": str(uuid.uuid1().time)
-            }]
-        else:
-            # Agregar como nuevo elemento
-            new_item = {
-                "id": f"item-{str(uuid.uuid4())[:8]}",
-                "content": content,
-                "timestamp": str(uuid.uuid1().time)
-            }
-            items.append(new_item)
-        
-        _set_context_items(items)
-        
-        ui.notify(
-            "Contexto de conversación actualizado",
-            color='positive',
-            position='bottom-right'
-        )
-        
-        return {
-            "result": "Contexto actualizado correctamente",
-            "total_items": len(items),
-            "operation": "replace" if replace else "append"
-        }
-    except Exception as e:
-        logger.error(f"Error al actualizar el contexto: {str(e)}")
-        return {"error": f"Error al actualizar el contexto: {str(e)}"}
-
-@meta_tool(
-    name="conversation_context_clear",
-    description="Limpia el contexto de la conversación actual",
-    parameters_schema={
-        "type": "object",
-        "properties": {},
-        "required": []
-    }
-)
-def clear_context() -> Dict[str, Any]:
-    """
-    Limpia el contexto de la conversación.
-    
-    Returns:
-        Diccionario con el resultado de la operación
-    """
-    try:
-        _clear_context()
-        
-        # Notificar al usuario
-        ui.notify(
-            "Contexto de conversación limpiado",
-            color='info',
-            position='bottom-right'
-        )
-        
-        return {
-            "result": "Contexto limpiado correctamente"
-        }
-    except Exception as e:
-        logger.error(f"Error al limpiar el contexto: {str(e)}")
-        return {"error": f"Error al limpiar el contexto: {str(e)}"}
 
 
 # Función para obtener el mensaje de contexto formateado para el sistema
@@ -454,13 +356,8 @@ def register_conversation_hook():
     # La integración ya está hecha en chat_handlers.py
     print("Contexto de conversación registrado correctamente.")
     
-    # Notificar al usuario
-    ui.notify(
-        "Sistema de contexto de conversación activado",
-        color='positive',
-        position='bottom-right',
-        timeout=3000
-    )
+    # No intentar mostrar notificaciones UI desde tareas de fondo
+    # La notificación se hará cuando el usuario interactúe con el sistema
     
     return {"success": True, "message": "Contexto registrado."}
 

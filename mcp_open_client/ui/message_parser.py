@@ -2,6 +2,46 @@ from nicegui import ui
 import re
 import json
 
+def format_tool_name(tool_name: str) -> str:
+    """Convert technical tool names to user-friendly display names."""
+    # Remove common prefixes
+    if tool_name.startswith('mcp-'):
+        tool_name = tool_name[4:]
+    if tool_name.startswith('code-editor:'):
+        tool_name = tool_name[12:]
+    
+    # Convert underscores, hyphens, and colons to spaces
+    formatted = tool_name.replace('_', ' ').replace('-', ' ').replace(':', ' ')
+    
+    # Split into words and capitalize each
+    words = formatted.split()
+    formatted_words = []
+    
+    for word in words:
+        # Handle special cases
+        if word.lower() == 'tool':
+            continue  # Skip 'tool' suffix
+        elif word.lower() == 'diff':
+            formatted_words.append('Diff')
+        elif word.lower() == 'api':
+            formatted_words.append('API')
+        elif word.lower() == 'http':
+            formatted_words.append('HTTP')
+        elif word.lower() == 'get':
+            formatted_words.append('GET')
+        elif word.lower() == 'post':
+            formatted_words.append('POST')
+        elif word.lower() == 'put':
+            formatted_words.append('PUT')
+        elif word.lower() == 'delete':
+            formatted_words.append('DELETE')
+        elif word.lower() == 'mcp':
+            continue  # Skip 'mcp' prefix that might remain
+        else:
+            formatted_words.append(word.capitalize())
+    
+    return ' '.join(formatted_words) if formatted_words else 'Herramienta'
+
 def is_structured_response(content: str) -> bool:
     """Check if content contains structured response metadata."""
     return "<!-- RESPONSE_METADATA:" in content
@@ -186,7 +226,7 @@ def render_tool_call_with_metadata(tool_call, tool_result=None, container=None):
             # Header with tool name (more integrated)
             with ui.row().classes('w-full items-center mb-2'):
                 ui.icon('build').classes('text-blue-600 mr-2 text-sm')
-                ui.label(f'Tool: {tool_name}').classes('font-semibold text-blue-700 text-sm')
+                ui.label(format_tool_name(tool_name)).classes('font-semibold text-blue-700 text-sm')
             
             # Content area (more compact)
             with ui.column().classes('space-y-2'):
