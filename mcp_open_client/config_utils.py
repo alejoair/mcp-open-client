@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Dict, Any, Optional
 from nicegui import app
 
@@ -6,9 +7,14 @@ def load_initial_config_from_files():
     """Load initial configuration from files into user storage (one-time operation)"""
     configs_loaded = {}
     
+    # Get the directory where this module is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    settings_dir = os.path.join(current_dir, 'settings')
+    
     # Load MCP configuration (only MCP servers)
+    mcp_config_path = os.path.join(settings_dir, 'mcp-config.json')
     try:
-        with open('mcp_open_client/settings/mcp-config.json', 'r', encoding='utf-8') as f:
+        with open(mcp_config_path, 'r', encoding='utf-8') as f:
             mcp_file_config = json.load(f)
             configs_loaded['mcp-config'] = mcp_file_config
             print("Loaded MCP servers configuration from mcp-config.json")
@@ -17,8 +23,9 @@ def load_initial_config_from_files():
         configs_loaded['mcp-config'] = {"mcpServers": {}}
 
     # Load user settings (API settings) from user-settings.json
+    user_settings_path = os.path.join(settings_dir, 'user-settings.json')
     try:
-        with open('mcp_open_client/settings/user-settings.json', 'r', encoding='utf-8') as f:
+        with open(user_settings_path, 'r', encoding='utf-8') as f:
             user_settings_file = json.load(f)
             configs_loaded['user-settings'] = user_settings_file
             print("Loaded user settings from user-settings.json")
