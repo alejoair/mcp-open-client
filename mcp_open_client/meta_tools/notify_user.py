@@ -10,6 +10,14 @@ from nicegui import ui
 # Tipos de notificación específicos para notify_user
 # Enfocados en informar sin terminar el flujo
 NOTIFICATION_TYPES = {
+    "info": {
+        "icon": "ℹ️",
+        "description": "Información general",
+        "background_color": "#e8f5e8",  # Verde suave
+        "border_color": "#4caf50",
+        "text_color": "#2e7d32",
+        "icon_bg": "#c8e6c9"
+    },
     "status": {
         "icon": "📊",
         "description": "Estado actual del sistema o proceso",
