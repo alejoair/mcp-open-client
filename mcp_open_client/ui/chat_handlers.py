@@ -231,7 +231,9 @@ def render_message_to_ui(message: dict, message_container) -> None:
     """Render a single message to the UI"""
     role = message.get('role', 'user')
     content = message.get('content', '')
-    tool_calls = message.get('tool_calls', [])
+    # CRÍTICO: Usar _ui_tool_calls para la visualización (tool calls filtrados)
+    # El campo tool_calls se mantiene completo para OpenAI API
+    tool_calls = message.get('_ui_tool_calls', message.get('tool_calls', []))
     tool_call_id = message.get('tool_call_id')
     was_truncated = message.get('_truncated', False)
     original_length = message.get('_original_length', 0)
@@ -244,8 +246,6 @@ def render_message_to_ui(message: dict, message_container) -> None:
                 # Show truncation notice if message was truncated
                 if was_truncated:
                     ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
-                    truncated_color = current_colors.get('truncated_message', '#fbbf24')
-                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style(f'color: {truncated_color};')
         elif role == 'assistant':
             # Only create container if there's content, tool calls, or truncation info to show
             if content or tool_calls or was_truncated:
@@ -480,62 +480,95 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
             # Get full conversation history for context
             conversation_messages = get_messages()
             
-            # Simple validation: remove orphaned tool calls
+            # Improved validation: carefully handle tool call sequences
             def clean_orphaned_tools(messages):
-                """Remove orphaned tool calls - keep only complete sequences"""
+                """
+                Carefully clean tool call sequences while preserving valid pending calls.
+                More conservative approach to avoid breaking valid sequences.
+                """
                 if not messages:
                     return []
-                
+
                 # Convert to API format first
                 api_messages = []
                 for msg in messages:
-                    if not msg.get("content") and msg.get("role") != "assistant":
+                    # Keep all messages with valid roles
+                    if msg.get("role") not in ["user", "assistant", "tool", "system"]:
                         continue
-                    
+
                     api_msg = {
                         "role": msg["role"],
                         "content": msg.get("content") or ""
                     }
-                    
+
                     if msg["role"] == "assistant" and msg.get("tool_calls"):
                         api_msg["tool_calls"] = msg["tool_calls"]
                     elif msg["role"] == "tool" and msg.get("tool_call_id"):
                         api_msg["tool_call_id"] = msg["tool_call_id"]
-                    
+
                     api_messages.append(api_msg)
-                
-                # Find tool calls that have responses
+
+                # Build tool call tracking
                 tool_call_ids = set()
                 tool_response_ids = set()
-                
-                for msg in api_messages:
+                tool_call_positions = {}  # track position of each tool call
+
+                for i, msg in enumerate(api_messages):
                     if msg["role"] == "assistant" and "tool_calls" in msg:
                         for tc in msg["tool_calls"]:
                             tool_call_ids.add(tc["id"])
+                            tool_call_positions[tc["id"]] = i
                     elif msg["role"] == "tool" and "tool_call_id" in msg:
                         tool_response_ids.add(msg["tool_call_id"])
-                
-                # Remove assistant messages with orphaned tool calls (except the last one)
+
+                # CONSERVATIVE CLEANUP: Only remove clearly orphaned calls
                 cleaned = []
                 for i, msg in enumerate(api_messages):
                     if msg["role"] == "assistant" and "tool_calls" in msg:
-                        # Check if all tool calls have responses
-                        has_orphaned = any(tc["id"] not in tool_response_ids for tc in msg["tool_calls"])
-                        is_last_message = i == len(api_messages) - 1
-                        
-                        if has_orphaned and not is_last_message:
-                            # Remove tool_calls from orphaned assistant message
-                            cleaned_msg = {"role": msg["role"], "content": msg["content"] or "[Tool call removed]"}
-                            cleaned.append(cleaned_msg)
-                        else:
+                        is_last_assistant = (i == len(api_messages) - 1) or all(
+                            m["role"] != "assistant" for m in api_messages[i+1:]
+                        )
+
+                        # Keep the last assistant message even if tool calls are pending
+                        if is_last_assistant:
                             cleaned.append(msg)
+                        else:
+                            # Check if this is truly orphaned (not just pending)
+                            has_all_responses = all(
+                                tc["id"] in tool_response_ids
+                                for tc in msg["tool_calls"]
+                            )
+
+                            if has_all_responses:
+                                # Complete sequence - keep it
+                                cleaned.append(msg)
+                            else:
+                                # Only remove if there are later assistant messages
+                                # (indicating this sequence was abandoned)
+                                has_later_assistant = any(
+                                    m["role"] == "assistant"
+                                    for m in api_messages[i+1:]
+                                )
+
+                                if has_later_assistant:
+                                    # Convert to regular assistant message
+                                    cleaned_msg = {
+                                        "role": msg["role"],
+                                        "content": msg["content"] or "[Tool calls removed due to incomplete sequence]"
+                                    }
+                                    cleaned.append(cleaned_msg)
+                                else:
+                                    # Keep as-is (might be pending)
+                                    cleaned.append(msg)
                     elif msg["role"] == "tool":
                         # Only keep tool responses that have corresponding calls
                         if msg["tool_call_id"] in tool_call_ids:
                             cleaned.append(msg)
+                        # Silently drop orphaned tool responses
                     else:
+                        # Keep all other messages (user, system)
                         cleaned.append(msg)
-                
+
                 return cleaned
             
             # Clean conversation messages
@@ -642,15 +675,21 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                 if notify_user_calls:
                     # CASO ESPECIAL: Procesar TODAS las llamadas a notify_user
                     try:
-                        # PRIMERO: Agregar el assistant message original solo si tiene tool calls no-meta o contenido relevante
+                        # PRIMERO: Agregar el assistant message original con TODOS los tool_calls
+                        # NO FILTRAR para evitar error OpenAI API "tool_call_id did not have response"
                         assistant_message = response['choices'][0]['message']
                         original_tool_calls = assistant_message.get('tool_calls', [])
-                        filtered_tool_calls = [tc for tc in original_tool_calls if tc.get('function', {}).get('name') not in ['meta-respond_to_user', 'meta-notify_user']]
                         original_content = (assistant_message.get('content') or '').strip()
-                        
-                        # Solo agregar el mensaje original si tiene tool calls no-meta y contenido
-                        if filtered_tool_calls and original_content:
-                            add_message('assistant', original_content, tool_calls=filtered_tool_calls)
+
+                        # Agregar TODOS los tool_calls originales para mantener secuencia OpenAI válida
+                        # Usar flags especiales para controlar visualización en UI
+                        filtered_tool_calls_for_ui = [tc for tc in original_tool_calls if tc.get('function', {}).get('name') not in ['meta-respond_to_user', 'meta-notify_user']]
+
+                        # Solo agregar el mensaje original si tiene contenido o tool calls
+                        if original_content or original_tool_calls:
+                            add_message('assistant', original_content,
+                                      tool_calls=original_tool_calls,  # MANTENER TODOS para OpenAI
+                                      _ui_tool_calls=filtered_tool_calls_for_ui)  # Para visualización UI
                         
                         # SEGUNDO: Procesar cada notify_user secuencialmente
                         for notify_call in notify_user_calls:
@@ -694,22 +733,25 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                     # Agregar el mensaje del asistente original al historial AHORA (después de procesar meta tools)
                     assistant_message = response['choices'][0]['message']
                 
-                # FILTRAR tool calls para la UI (excluir respond_to_user y notify_user)
-                original_tool_calls = assistant_message.get('tool_calls', [])
-                filtered_tool_calls = []
-                for tool_call in original_tool_calls:
-                    tool_name = tool_call.get('function', {}).get('name')
-                    if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
-                        filtered_tool_calls.append(tool_call)
+                    # CRÍTICO: NO FILTRAR tool calls para evitar error OpenAI API "tool_call_id did not have response"
+                    # Mantener TODOS los tool_calls originales para OpenAI, usar flags para UI
+                    original_tool_calls = assistant_message.get('tool_calls', [])
+                    filtered_tool_calls_for_ui = []
+                    for tool_call in original_tool_calls:
+                        tool_name = tool_call.get('function', {}).get('name')
+                        if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
+                            filtered_tool_calls_for_ui.append(tool_call)
                 
-                # Agregar mensaje del asistente al historial (con tool calls filtrados para UI)
-                add_message('assistant', assistant_message.get('content', ''), tool_calls=filtered_tool_calls)
+                    # Agregar mensaje del asistente con TODOS los tool_calls para mantener secuencia OpenAI válida
+                    add_message('assistant', assistant_message.get('content', ''),
+                              tool_calls=original_tool_calls,  # MANTENER TODOS para OpenAI
+                              _ui_tool_calls=filtered_tool_calls_for_ui)  # Para visualización UI
                 
-                # Update UI immediately after adding assistant message with tool calls
-                message_container.clear()
-                from .chat_interface import render_messages
-                render_messages(message_container)
-                await safe_scroll_to_bottom(scroll_area, delay=0.1)
+                    # Update UI immediately after adding assistant message with tool calls
+                    message_container.clear()
+                    from .chat_interface import render_messages
+                    render_messages(message_container)
+                    await safe_scroll_to_bottom(scroll_area, delay=0.1)
                 
                 # Process tool calls - parallel execution for better performance
                 tool_results = []
@@ -878,15 +920,18 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             content = assistant_message.get('content', '')
                             tool_calls = assistant_message.get('tool_calls', [])
                             
-                            # FILTRAR tool calls para excluir respond_to_user y notify_user de la UI (bucle)
-                            filtered_tool_calls_loop = []
+                            # CRÍTICO: NO FILTRAR tool calls para evitar error OpenAI API "tool_call_id did not have response"
+                            # Mantener TODOS los tool_calls originales para OpenAI, usar flags para UI (bucle)
+                            filtered_tool_calls_for_ui_loop = []
                             for tool_call in tool_calls:
                                 tool_name = tool_call.get('function', {}).get('name')
                                 if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
-                                    filtered_tool_calls_loop.append(tool_call)
-                            
-                            # Add assistant response
-                            add_message('assistant', content, filtered_tool_calls_loop)
+                                    filtered_tool_calls_for_ui_loop.append(tool_call)
+
+                            # Add assistant response con TODOS los tool_calls para mantener secuencia OpenAI válida
+                            add_message('assistant', content,
+                                      tool_calls=tool_calls,  # MANTENER TODOS para OpenAI
+                                      _ui_tool_calls=filtered_tool_calls_for_ui_loop)  # Para visualización UI
                             
                             # Re-render messages to show assistant response
                             message_container.clear()
