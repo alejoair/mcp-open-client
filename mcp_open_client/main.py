@@ -54,7 +54,14 @@ def init_storage():
         print("Configuration migration complete - future changes will be stored in user storage only")
     else:
         print("Existing user configuration found - preserving user settings")
-        print(f"Current user-settings: {app.storage.user.get('user-settings', {})}")
+        # Safely print user settings, handling Unicode characters that may not display in Windows console
+        try:
+            user_settings = app.storage.user.get('user-settings', {})
+            print(f"Current user-settings: {user_settings}")
+        except UnicodeEncodeError:
+            # Fallback: Convert problematic Unicode to safe representation
+            user_settings_str = str(app.storage.user.get('user-settings', {})).encode('ascii', 'replace').decode('ascii')
+            print(f"Current user-settings: {user_settings_str}")
     
     # Always load initial configs for fallback purposes
     if 'initial_configs' not in locals():

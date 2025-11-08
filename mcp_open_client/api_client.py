@@ -4,6 +4,16 @@ from typing import Dict, List, Optional, Union, Any
 import openai
 from openai import AsyncOpenAI
 from nicegui import app
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    retry_if_exception,
+    before_sleep_log,
+    after_log,
+    RetryCallState
+)
 
 # Configure logging with less verbosity
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -18,6 +28,102 @@ logger = logging.getLogger("APIClient")
 
 class APIClientError(Exception):
     pass
+
+
+def is_retryable_api_error(exception):
+    """
+    Determina si un error de API es reintentable.
+
+    Args:
+        exception: La excepción a evaluar
+
+    Returns:
+        bool: True si el error es reintentable
+    """
+    # Errores de OpenAI que son reintentables
+    if isinstance(exception, (
+        openai.InternalServerError,  # 500, 503, etc.
+        openai.RateLimitError,       # 429
+        openai.APITimeoutError,      # Timeouts
+        openai.APIConnectionError    # Connection issues
+    )):
+        return True
+
+    # Check for specific error messages
+    error_str = str(exception).lower()
+    retryable_keywords = [
+        'too many requests',
+        'high traffic',
+        'queue exceeded',
+        'service unavailable',
+        'internal server error',
+        'timeout',
+        'connection error',
+        'temporary failure',
+        '503',
+        '429',
+        '500',
+        '502',
+        '504'
+    ]
+
+    return any(keyword in error_str for keyword in retryable_keywords)
+
+
+def get_error_type_for_ui(exception):
+    """Obtiene tipo de error amigable para mostrar en UI"""
+    if isinstance(exception, openai.InternalServerError):
+        if '503' in str(exception):
+            return "Servidor Sobrecargado"
+        return "Error del Servidor"
+
+    if isinstance(exception, openai.RateLimitError):
+        return "Límite de Velocidad"
+
+    if isinstance(exception, openai.APITimeoutError):
+        return "Timeout de Conexión"
+
+    if isinstance(exception, openai.APIConnectionError):
+        return "Error de Conexión"
+
+    error_str = str(exception).lower()
+    if 'high traffic' in error_str or 'queue exceeded' in error_str:
+        return "Alto Tráfico"
+
+    return "Error Temporal"
+
+
+def before_retry_callback(retry_state: RetryCallState):
+    """Callback para mostrar notificación antes de retry"""
+    try:
+        from .ui.retry_notification import show_retry_notification
+
+        attempt = retry_state.attempt_number
+        max_attempts = 5  # Configurado en el decorador
+        next_retry_in = int(retry_state.next_action.sleep)
+        error_type = get_error_type_for_ui(retry_state.outcome.exception())
+
+        show_retry_notification(attempt, max_attempts, next_retry_in, error_type)
+
+    except Exception as e:
+        # No fallar por problemas de UI
+        logger.warning(f"Error showing retry notification: {e}")
+
+
+def after_retry_callback(retry_state: RetryCallState):
+    """Callback para mostrar resultado después de retry"""
+    try:
+        if retry_state.outcome and not retry_state.outcome.failed:
+            # Success
+            from .ui.retry_notification import show_retry_success
+            show_retry_success()
+        elif retry_state.attempt_number >= 5:  # Max attempts reached
+            from .ui.retry_notification import show_retry_failed
+            show_retry_failed(5)
+
+    except Exception as e:
+        # No fallar por problemas de UI
+        logger.warning(f"Error showing retry result notification: {e}")
 
 class APIClient:
     def __init__(
@@ -115,6 +221,44 @@ class APIClient:
         **kwargs
     ) -> Dict[str, Any]:
         """
+        Create a chat completion using the API with automatic retries.
+        """
+        return await self._chat_completion_with_retry(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            stop=stop,
+            stream=stream,
+            system_prompt=system_prompt,
+            **kwargs
+        )
+
+    @retry(
+        stop=stop_after_attempt(5),  # Máximo 5 intentos
+        wait=wait_exponential(multiplier=1, min=10, max=120),  # 10s, 20s, 40s, 80s, 120s
+        retry=retry_if_exception(is_retryable_api_error),
+        before_sleep=before_retry_callback,  # UI notification callback
+        after=after_retry_callback  # Success/failure callback
+    )
+    async def _chat_completion_with_retry(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        stop: Optional[Union[str, List[str]]] = None,
+        stream: bool = False,
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
         Create a chat completion using the API.
         
         Args:
@@ -192,7 +336,7 @@ class APIClient:
                     logger.warning("Grammar stack error detected, retrying without tools")
                     fallback_params = params.copy()
                     fallback_params.pop('tools', None)
-                    fallback_params.pop('tool_choice', None) 
+                    fallback_params.pop('tool_choice', None)
                     try:
                         response = await self._client.chat.completions.create(**fallback_params)
                         logger.info("Fallback without tools successful")
@@ -206,9 +350,8 @@ class APIClient:
                     logger.error(error_msg)
                     raise APIClientError(error_msg) from e
             else:
-                error_msg = f"OpenAI API error in chat completion: {error_str}"
-                logger.error(error_msg)
-                raise APIClientError(error_msg) from e
+                # Re-raise the original OpenAI error for retry handler to catch
+                raise e
         except Exception as e:
             error_msg = f"Unexpected error in chat completion: {str(e)}"
             logger.error(error_msg)
