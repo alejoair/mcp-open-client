@@ -12,7 +12,7 @@ import json
 # Enfocados en finalizar conversaciones y dar respuestas definitivas
 RESPONSE_TYPES = {
     "final_answer": {
-        "icon": "✅",
+        "icon": "[OK]",
         "description": "Respuesta final o conclusión definitiva",
         "background_color": "#e8f5e9",  # Verde suave
         "border_color": "#4caf50",
@@ -20,7 +20,7 @@ RESPONSE_TYPES = {
         "icon_bg": "#c8e6c9"
     },
     "completed": {
-        "icon": "🎉",
+        "icon": "[SUCCESS]",
         "description": "Tarea completada exitosamente",
         "background_color": "#e8f5e9",  # Verde suave
         "border_color": "#4caf50",
@@ -28,7 +28,7 @@ RESPONSE_TYPES = {
         "icon_bg": "#c8e6c9"
     },
     "explanation": {
-        "icon": "💡",
+        "icon": "[TIP]",
         "description": "Explicación completa y detallada",
         "background_color": "#fff8e1",  # Amarillo suave
         "border_color": "#ffc107",
@@ -36,7 +36,7 @@ RESPONSE_TYPES = {
         "icon_bg": "#fff3c4"
     },
     "need_clarification": {
-        "icon": "❓",
+        "icon": "[QUESTION]",
         "description": "Necesita información adicional del usuario",
         "background_color": "#e1f5fe",  # Azul claro suave
         "border_color": "#03a9f4",
@@ -44,7 +44,7 @@ RESPONSE_TYPES = {
         "icon_bg": "#b3e5fc"
     },
     "error_final": {
-        "icon": "❌",
+        "icon": "[ERROR]",
         "description": "Error crítico que termina el proceso",
         "background_color": "#ffebee",  # Rojo suave
         "border_color": "#f44336",
@@ -56,34 +56,34 @@ RESPONSE_TYPES = {
 @meta_tool(
     name="respond_to_user",
     description="""
-    🔚 HERRAMIENTA TERMINAL - Envía respuesta final al usuario y TERMINA la conversación.
-    
-    ⚠️ CRÍTICO: Esta herramienta DEBE ser la ÚLTIMA acción en tu respuesta.
-    🚫 NO ejecutes más herramientas después de usar respond_to_user.
-    🔚 NO continues procesando después de llamar esta función.
+    [TERMINAL] HERRAMIENTA TERMINAL - Envía respuesta final al usuario y TERMINA la conversación.
+
+    [WARNING] CRÍTICO: Esta herramienta DEBE ser la ÚLTIMA acción en tu respuesta.
+    [FORBIDDEN] NO ejecutes más herramientas después de usar respond_to_user.
+    [TERMINAL] NO continues procesando después de llamar esta función.
     
     Esta herramienta devuelve el control al usuario con una respuesta estructurada
     que se muestra con iconos y estilos específicos en la interfaz.
     
     Tipos de respuesta terminales disponibles:
-    - final_answer: Respuesta final o conclusión definitiva ✅
-    - completed: Tarea completada exitosamente 🎉
-    - explanation: Explicación completa y detallada 💡
-    - need_clarification: Necesita información adicional del usuario ❓
-    - error_final: Error crítico que termina el proceso ❌
-    
-    🔚 REGLA ABSOLUTA: Después de llamar respond_to_user, tu trabajo TERMINA.
+    - final_answer: Respuesta final o conclusión definitiva [OK]
+    - completed: Tarea completada exitosamente [SUCCESS]
+    - explanation: Explicación completa y detallada [TIP]
+    - need_clarification: Necesita información adicional del usuario [QUESTION]
+    - error_final: Error crítico que termina el proceso [ERROR]
+
+    [TERMINAL] REGLA ABSOLUTA: Después de llamar respond_to_user, tu trabajo TERMINA.
     Esta herramienta marca el FIN DEFINITIVO de tu procesamiento.
     El control vuelve al usuario inmediatamente después de esta llamada.
     
-    💡 CUÁNDO USAR:
+    [TIP] CUÁNDO USAR:
     - Cuando hayas completado la tarea solicitada
     - Cuando necesites dar una respuesta final
     - Cuando quieras terminar la conversación elegantemente
     - Cuando hayas proporcionado toda la información necesaria
     - Cuando necesites más información del usuario para continuar (need_clarification)
-    
-    🚫 NO USAR si planeas ejecutar más herramientas después.
+
+    [FORBIDDEN] NO USAR si planeas ejecutar más herramientas después.
     """,
     parameters_schema={
         "type": "object",
@@ -96,7 +96,7 @@ RESPONSE_TYPES = {
                 "type": "string",
                 "enum": list(RESPONSE_TYPES.keys()),
                 "description": "Tipo de respuesta para determinar la presentación visual",
-                "default": "info"
+                "default": "final_answer"
             },
             "title": {
                 "type": "string",
@@ -113,7 +113,7 @@ RESPONSE_TYPES = {
         "required": ["content"]
     }
 )
-async def respond_to_user(content: str, response_type: str = "info", title: Optional[str] = None, format: str = "markdown") -> str:
+async def respond_to_user(content: str, response_type: str = "final_answer", title: Optional[str] = None, format: str = "markdown") -> str:
     """
     Genera una respuesta estructurada al usuario.
     
@@ -133,7 +133,7 @@ async def respond_to_user(content: str, response_type: str = "info", title: Opti
     """
     # Validar tipo de respuesta
     if response_type not in RESPONSE_TYPES:
-        response_type = "info"
+        response_type = "final_answer"
     
     # Validar formato
     if format not in ["markdown", "html"]:
