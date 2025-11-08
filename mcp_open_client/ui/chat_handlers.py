@@ -245,7 +245,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                 
                 # Show truncation notice if message was truncated
                 if was_truncated:
-                    ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
+                    ui.label(f'Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
         elif role == 'assistant':
             # Only create container if there's content, tool calls, or truncation info to show
             if content or tool_calls or was_truncated:
@@ -255,7 +255,7 @@ def render_message_to_ui(message: dict, message_container) -> None:
                     
                     # Show truncation notice if message was truncated
                     if was_truncated:
-                        ui.label(f'⚠️ Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
+                        ui.label(f'Message truncated (original: {original_length:,} chars)').classes('text-xs mt-2 italic').style('color: #fbbf24;')
                     
                     # Show tool calls if present with enhanced metadata display
                     if tool_calls:
@@ -683,7 +683,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
 
                         # Agregar TODOS los tool_calls originales para mantener secuencia OpenAI válida
                         # Usar flags especiales para controlar visualización en UI
-                        filtered_tool_calls_for_ui = [tc for tc in original_tool_calls if tc.get('function', {}).get('name') not in ['meta-respond_to_user', 'meta-notify_user']]
+                        filtered_tool_calls_for_ui = [tc for tc in original_tool_calls if not tc.get('function', {}).get('name', '').startswith('meta-')]
 
                         # Solo agregar el mensaje original si tiene contenido o tool calls
                         if original_content or original_tool_calls:
@@ -739,7 +739,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                     filtered_tool_calls_for_ui = []
                     for tool_call in original_tool_calls:
                         tool_name = tool_call.get('function', {}).get('name')
-                        if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
+                        if not tool_name.startswith('meta-'):
                             filtered_tool_calls_for_ui.append(tool_call)
                 
                     # Agregar mensaje del asistente con TODOS los tool_calls para mantener secuencia OpenAI válida
@@ -925,7 +925,7 @@ async def handle_send(input_field, message_container, api_client, scroll_area, s
                             filtered_tool_calls_for_ui_loop = []
                             for tool_call in tool_calls:
                                 tool_name = tool_call.get('function', {}).get('name')
-                                if tool_name not in ['meta-respond_to_user', 'meta-notify_user']:
+                                if not tool_name.startswith('meta-'):
                                     filtered_tool_calls_for_ui_loop.append(tool_call)
 
                             # Add assistant response con TODOS los tool_calls para mantener secuencia OpenAI válida
