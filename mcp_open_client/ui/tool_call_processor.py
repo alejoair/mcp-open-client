@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 async def process_meta_tools(tool_calls: List[Dict[str, Any]], handle_tool_call_func) -> Tuple[Optional[Dict], List[Dict], List[Dict]]:
     """
-    Procesa meta tools especiales (respond_to_user y notify_user).
+    Procesa todas las meta tools automáticamente.
 
     Args:
         tool_calls: Lista de tool calls a procesar
@@ -20,16 +20,29 @@ async def process_meta_tools(tool_calls: List[Dict[str, Any]], handle_tool_call_
     respond_to_user_call = None
     notify_user_calls = []
     remaining_tool_calls = []
+    other_meta_tools = []
 
     for tool_call in tool_calls:
         tool_name = tool_call.get('function', {}).get('name')
+
         if tool_name == 'meta-respond_to_user':
             respond_to_user_call = tool_call
             break  # Solo puede haber uno de estos y termina la ejecución
         elif tool_name == 'meta-notify_user':
             notify_user_calls.append(tool_call)  # Puede haber múltiples
+        elif tool_name and tool_name.startswith('meta-'):
+            # Cualquier otra meta tool se procesa automáticamente
+            other_meta_tools.append(tool_call)
         else:
             remaining_tool_calls.append(tool_call)
+
+    # Procesar otras meta tools automáticamente
+    for meta_tool_call in other_meta_tools:
+        try:
+            await handle_tool_call_func(meta_tool_call)
+        except Exception as e:
+            # Log error but continue processing
+            print(f"Error processing meta tool {meta_tool_call.get('function', {}).get('name')}: {e}")
 
     return respond_to_user_call, notify_user_calls, remaining_tool_calls
 

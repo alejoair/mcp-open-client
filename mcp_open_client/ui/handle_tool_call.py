@@ -201,13 +201,23 @@ Please retry with properly formatted JSON."""
         success_criteria = arguments.pop("success_criteria", "No especificado")
         
         # Determine if this is a meta tool or an MCP tool
-        is_meta_tool = tool_name.startswith("meta-") or f"meta-{tool_name}" in meta_tool_registry.tools
+        # Check if it's directly registered as meta tool or if it starts with meta-
+        is_meta_tool = (tool_name.startswith("meta-") or
+                       tool_name in meta_tool_registry.tools or
+                       f"meta-{tool_name}" in meta_tool_registry.tools)
+
+        print(f"DEBUG: Tool '{tool_name}' - is_meta_tool: {is_meta_tool}")
+        if is_meta_tool:
+            print(f"DEBUG: Available meta tools: {list(meta_tool_registry.tools.keys())}")
         
         # Execute the appropriate tool based on type
         try:
             if is_meta_tool:
-                
-                result = await meta_tool_registry.execute_tool(tool_name, arguments)
+                # Get tools config and pass to meta tool for execution
+                from mcp_open_client.config_utils import get_tools_config
+                tools_config = get_tools_config()
+
+                result = await meta_tool_registry.execute_tool_with_config(tool_name, arguments, tools_config)
                 
                 # Format meta tool result for the LLM
                 if result and isinstance(result, dict):
@@ -382,15 +392,35 @@ async def get_available_tools() -> List[Dict[str, Any]]:
         List of tool definitions in OpenAI format, including both MCP tools and meta tools
     """
     try:
-        # Check if MCP client is connected
+        print("DEBUG: get_available_tools() called", flush=True)
+        import logging
+        logging.getLogger(__name__).warning("DEBUG: get_available_tools() called")
+        openai_tools = []
+
+        # Add meta tools first (always available, regardless of MCP connection)
+        try:
+            # Get tools config here in UI context and pass to meta tools
+            from mcp_open_client.config_utils import get_tools_config
+            tools_config = get_tools_config()
+
+            meta_tools = meta_tool_registry.get_tools_schema_with_config(tools_config)
+            if meta_tools:
+                openai_tools.extend(meta_tools)
+                print(f"DEBUG: Added {len(meta_tools)} meta tools: {[tool['function']['name'] for tool in meta_tools]}")
+            else:
+                print("DEBUG: No meta tools found!")
+        except Exception as e:
+            print(f"DEBUG: Error getting meta tools: {e}")
+
+        # Check if MCP client is connected for MCP tools
         if not mcp_client_manager.is_connected():
-            return []
-        
+            return openai_tools  # Return at least meta tools even if MCP is not connected
+
         # Get tools from MCP client manager
         mcp_tools = await mcp_client_manager.list_tools()
-        
+
         if not mcp_tools:
-            return []
+            return openai_tools  # Return meta tools even if no MCP tools available
         
         # Convert MCP tools to OpenAI format and filter by configuration
         from mcp_open_client.config_utils import is_tool_enabled
@@ -482,13 +512,6 @@ async def get_available_tools() -> List[Dict[str, Any]]:
             except Exception as e:
                 continue
         
-        # Add meta tools to the list
-        try:
-            meta_tools = meta_tool_registry.get_tools_schema()
-            if meta_tools:
-                openai_tools.extend(meta_tools)
-        except Exception as e:
-            pass
         return openai_tools
         
     except Exception as e:
