@@ -1,86 +1,150 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "mcp-open-client"
-version = "0.4.27"
-description = "A modern, web-based chat application implementing the Model Context Protocol (MCP) for seamless LLM-tool integration"
-authors = [{name = "alejoair", email = "your.email@example.com"}]
-license = {text = "MIT"}
+version = "0.1.0"
+description = "A modern, web-based MCP (Model Context Protocol) client with FastAPI backend and React frontend"
 readme = "README.md"
-requires-python = ">=3.8"
-keywords = ["mcp", "model-context-protocol", "llm", "chat", "ai", "nicegui", "claude", "openai"]
+license = { text = "MIT" }
+authors = [
+    { name = "MCP Open Client Team", email = "contact@example.com" }
+]
+maintainers = [
+    { name = "MCP Open Client Team", email = "contact@example.com" }
+]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "claude",
+    "anthropic",
+    "client",
+    "web",
+    "fastapi",
+    "react"
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Communications :: Chat",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+requires-python = ">=3.8"
 dependencies = [
-    "nicegui==2.21.1",
-    "openai==1.97.1",
-    "jsonschema>=4.0.0",
-    "requests>=2.25.0",
-    "fastmcp>=2.8.0",
-    "websockets>=11.0",
-    "tiktoken>=0.5.0",
-    "pydantic>=2.8.0,<2.11.0",
-    "pydantic-core>=2.20.0,<2.27.0",
-    "fastapi==0.116.1"
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "mcp>=1.0.0",
+    "websockets>=12.0",
+    "aiofiles>=23.0.0",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.0",
+    "python-json-logger>=2.0.0",
+    "click>=8.0.0",
+    "cryptography>=41.0.0",
+    "aiohttp>=3.8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
-    "flake8>=5.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
     "mypy>=1.0.0",
-    "types-requests",
-    "types-jsonschema",
-    "build>=0.8.0",
-    "twine>=4.0.0"
+    "pre-commit>=3.0.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.23.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/alejoair/mcp-open-client"
-"Documentation" = "https://github.com/alejoair/mcp-open-client/wiki"
-"Repository" = "https://github.com/alejoair/mcp-open-client.git"
-"Bug Tracker" = "https://github.com/alejoair/mcp-open-client/issues"
-"Changelog" = "https://github.com/alejoair/mcp-open-client/releases"
+Homepage = "https://github.com/your-org/mcp-open-client"
+Documentation = "https://mcp-open-client.readthedocs.io"
+Repository = "https://github.com/your-org/mcp-open-client"
+Issues = "https://github.com/your-org/mcp-open-client/issues"
+Changelog = "https://github.com/your-org/mcp-open-client/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mcp-open-client = "mcp_open_client.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["."] 
-include = ["mcp_open_client*"]
-exclude = ["tests*"]
+[tool.hatch.version]
+path = "mcp_open_client/__about__.py"
 
-[tool.setuptools.package-data]
-mcp_open_client = [
-    "settings/*.css",
-    "settings/*.json",
-    "ui/*.py",
+[tool.hatch.build]
+include = [
+    "/mcp_open_client",
+    "/README.md",
+    "/LICENSE",
 ]
 
-# Tool configurations
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_open_client"]
+
+[tool.black]
+target-version = ["py38"]
+line-length = 88
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["mcp_open_client"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__about__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
 
-[tool.flake8]
-max-line-length = 127
-extend-ignore = ["E203", "W503"]
-exclude = [".git", "__pycache__", "build", "dist"]
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false

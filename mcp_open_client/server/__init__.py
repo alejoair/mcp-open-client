@@ -1,0 +1,1 @@
+"""Server package for MCP Open Client."""

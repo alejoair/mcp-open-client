@@ -1,0 +1,49 @@
+{
+  "app": {
+    "name": "MCP Open Client",
+    "version": "1.0.0",
+    "theme": "terminal-dark"
+  },
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_encrypted": null
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "base_url": "https://api.anthropic.com/v1",
+      "api_key_encrypted": null
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "base_url": "https://api.cerebras.ai/v1",
+      "api_key_encrypted": "gAAAAABpD-KMN_MNeyr3MWNHAch2Hng0tRx0HNPYleNCTA6_YlDbhyjaXjFRNiPhWWQThAeMhfZHAy5F8M8kY5uRgjbwuP2C7BnWO6PeIhn2dcpH-v8BlyUTEoZQLSSYotuTk52eGUXgXDgM4O5xvHfq8sNUJakTDw=="
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "api_key_encrypted": null
+    }
+  ],
+  "selected_configuration": {
+    "provider_id": "cerebras",
+    "main_model": "zai-glm-4.6",
+    "small_model": "gpt-oss-120b"
+  },
+  "ui": {
+    "left_sidebar_collapsed": false,
+    "right_sidebar_collapsed": false,
+    "bottom_panel_collapsed": true,
+    "theme_mode": "dark"
+  },
+  "mcp": {
+    "servers": [],
+    "tools": [],
+    "resources": []
+  }
+}

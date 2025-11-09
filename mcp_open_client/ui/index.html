@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Open Client - Terminal Interface</title>
+
+    <!-- CDN Libraries -->
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Ant Design CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/antd@5.28.0/dist/reset.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Terminal Console Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fira+Code:wght@300..700&display=swap');
+
+        :root {
+            --terminal-bg: #0d1117;
+            --terminal-bg-light: #161b22;
+            --terminal-background: #0d1117;
+            --terminal-surface: #161b22;
+            --terminal-border: #21262d;
+            --terminal-text: #c9d1d9;
+            --terminal-text-dim: #8b949e;
+            --terminal-text-bright: #f0f6fc;
+            --terminal-green: #7c3aed;
+            --terminal-blue: #58a6ff;
+            --terminal-yellow: #ffd700;
+            --terminal-red: #f85149;
+            --terminal-cyan: #56d4dd;
+            --terminal-purple: #bc8cff;
+            --terminal-gray: #8b949e;
+            --cursor-color: #7c3aed;
+            --selection: #3d444d;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100vh;
+            background-color: var(--terminal-bg);
+            color: var(--terminal-text);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow: hidden;
+        }
+
+        .terminal-container {
+            height: 100vh;
+            background: var(--terminal-bg);
+            border: 1px solid var(--terminal-border);
+        }
+
+        .terminal-header {
+            background: var(--terminal-bg-light);
+            border-bottom: 1px solid var(--terminal-border);
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 48px;
+        }
+
+        .terminal-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .terminal-prompt {
+            color: var(--terminal-green);
+            font-weight: 600;
+        }
+
+        .terminal-path {
+            color: var(--terminal-blue);
+        }
+
+        .terminal-title-text {
+            color: var(--terminal-text-bright);
+            font-weight: 500;
+            font-size: 16px;
+        }
+
+        .help-button {
+            background: transparent;
+            border: 1px solid var(--terminal-border);
+            color: var(--terminal-text);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .help-button:hover {
+            background: var(--terminal-bg);
+            border-color: var(--terminal-green);
+            color: var(--terminal-green);
+            box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+        }
+
+        .help-icon {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .terminal-body {
+            flex: 1;
+            padding: 16px;
+            background: var(--terminal-bg);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .terminal-content {
+            max-width: 100%;
+        }
+
+        .ascii-art {
+            color: var(--terminal-green);
+            font-size: 12px;
+            margin-bottom: 24px;
+            white-space: pre-line;
+            line-height: 1.2;
+        }
+
+        .welcome-message {
+            color: var(--terminal-text-bright);
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .status-indicator {
+            color: var(--terminal-green);
+            font-weight: bold;
+        }
+
+        .info-section {
+            margin-bottom: 24px;
+        }
+
+        .info-title {
+            color: var(--terminal-cyan);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .info-list {
+            list-style: none;
+            padding-left: 16px;
+        }
+
+        .info-list li {
+            color: var(--terminal-text-dim);
+            margin-bottom: 4px;
+            position: relative;
+        }
+
+        .info-list li::before {
+            content: '▶';
+            color: var(--terminal-purple);
+            position: absolute;
+            left: -16px;
+            font-size: 10px;
+        }
+
+        .command-line {
+            display: flex;
+            align-items: center;
+            margin-top: 32px;
+        }
+
+        .prompt {
+            color: var(--terminal-green);
+            margin-right: 8px;
+            font-weight: 600;
+        }
+
+        .cursor {
+            background: var(--cursor-color);
+            width: 8px;
+            height: 18px;
+            animation: blink 1s infinite;
+            margin-left: 4px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: var(--terminal-border) transparent;
+        }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: var(--terminal-border);
+            border-radius: 3px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--terminal-text-dim);
+        }
+
+        /* Hide Tailwind and other framework defaults */
+        .ant-btn {
+            font-family: inherit !important;
+        }
+
+        /* Global font override for all elements */
+        * {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        /* Specific overrides for all text elements */
+        h1, h2, h3, h4, h5, h6, p, span, div, button, input, textarea, label {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        /* Override all Ant Design components */
+        .ant-typography {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        .ant-btn, .ant-input, .ant-select, .ant-menu {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        /* Layout styles */
+        .main-layout {
+            flex: 1;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        /* Ant Design Layout overrides for terminal theme */
+        .ant-layout {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        .ant-layout-header {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        .ant-layout-sider {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        .ant-layout-content {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+        }
+
+        /* Override Ant Design default backgrounds */
+        .ant-layout {
+            background: var(--terminal-bg) !important;
+        }
+
+        .ant-layout-header {
+            background: var(--terminal-bg-light) !important;
+        }
+
+        .ant-layout-sider {
+            background: var(--terminal-bg-light) !important;
+        }
+
+        .ant-layout-content {
+            background: var(--terminal-bg) !important;
+        }
+
+        /* Accordion styles for terminal theme */
+        .terminal-accordion .ant-collapse-item {
+            border: none !important;
+            background: transparent !important;
+        }
+
+        .terminal-accordion .ant-collapse-header {
+            color: var(--terminal-cyan) !important;
+            background: transparent !important;
+            border-bottom: 1px solid var(--terminal-border) !important;
+            padding: 8px 12px !important;
+            font-family: inherit !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+        }
+
+        .terminal-accordion .ant-collapse-header:hover {
+            background: rgba(124, 58, 237, 0.1) !important;
+        }
+
+        .terminal-accordion .ant-collapse-content {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        .terminal-accordion .ant-collapse-content-box {
+            padding: 8px 12px !important;
+        }
+
+        .terminal-accordion .ant-collapse-expand-icon {
+            color: var(--terminal-purple) !important;
+            font-size: 10px !important;
+        }
+
+        .accordion-content .menu-item {
+            color: var(--terminal-text-dim);
+            font-size: 11px;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+            margin-bottom: 2px;
+        }
+
+        .accordion-content .menu-item:hover {
+            color: var(--terminal-text-bright);
+            background: rgba(124, 58, 237, 0.2);
+        }
+
+        .accordion-content .menu-item.add-item {
+            color: var(--terminal-green);
+            font-weight: 500;
+        }
+
+        .accordion-content .menu-item.add-item:hover {
+            color: var(--terminal-text-bright);
+            background: rgba(124, 191, 37, 0.2);
+        }
+
+        /* Pulse animation for status indicators */
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(1.1);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Terminal themed form controls */
+        .ant-select-selector {
+            background: var(--terminal-bg-light) !important;
+            border: 1px solid var(--terminal-border) !important;
+            color: var(--terminal-text) !important;
+            font-family: inherit !important;
+        }
+
+        .ant-select-selector:hover {
+            border-color: var(--terminal-cyan) !important;
+        }
+
+        .ant-select-focused .ant-select-selector {
+            border-color: var(--terminal-green) !important;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2) !important;
+        }
+
+        .ant-select-arrow {
+            color: var(--terminal-text-dim) !important;
+        }
+
+        .ant-input {
+            background: var(--terminal-bg-light) !important;
+            border: 1px solid var(--terminal-border) !important;
+            color: var(--terminal-text) !important;
+            font-family: inherit !important;
+        }
+
+        .ant-input:hover {
+            border-color: var(--terminal-cyan) !important;
+        }
+
+        .ant-input:focus {
+            border-color: var(--terminal-green) !important;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2) !important;
+        }
+
+        .ant-input::placeholder {
+            color: var(--terminal-text-dim) !important;
+        }
+
+        .ant-btn-primary {
+            background: var(--terminal-green) !important;
+            border-color: var(--terminal-green) !important;
+            color: var(--terminal-bg) !important;
+            font-family: inherit !important;
+        }
+
+        .ant-btn-primary:hover {
+            background: var(--terminal-purple) !important;
+            border-color: var(--terminal-purple) !important;
+        }
+
+        .ant-btn {
+            background: var(--terminal-bg-light) !important;
+            border-color: var(--terminal-border) !important;
+            color: var(--terminal-text) !important;
+            font-family: inherit !important;
+        }
+
+        .ant-btn:hover {
+            border-color: var(--terminal-cyan) !important;
+            color: var(--terminal-cyan) !important;
+        }
+
+        /* Dropdown menu styling */
+        .ant-select-dropdown {
+            background: var(--terminal-bg-light) !important;
+            border: 1px solid var(--terminal-border) !important;
+        }
+
+        .ant-select-item {
+            color: var(--terminal-text) !important;
+            font-family: inherit !important;
+        }
+
+        .ant-select-item-option-selected {
+            background: var(--terminal-green) !important;
+            color: var(--terminal-bg) !important;
+        }
+
+        .ant-select-item-option:hover {
+            background: rgba(124, 58, 237, 0.2) !important;
+        }
+
+        /* Loading spinner */
+        .ant-spin-dot-item {
+            background-color: var(--terminal-green) !important;
+        }
+
+        /* Disabled state */
+        .ant-btn-primary:disabled {
+            background: var(--terminal-text-dim) !important;
+            border-color: var(--terminal-text-dim) !important;
+            color: var(--terminal-bg) !important;
+            opacity: 0.6;
+        }
+
+        .ant-select-disabled .ant-select-selector {
+            background: var(--terminal-bg) !important;
+            color: var(--terminal-text-dim) !important;
+            opacity: 0.6;
+        }
+
+        /* Reasoning section styles */
+        .reasoning-section {
+            margin-bottom: 12px;
+            border: 1px solid var(--terminal-border);
+            border-radius: 6px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .reasoning-header {
+            background: var(--terminal-bg);
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            fontSize: 12px;
+            font-weight: 600;
+            color: var(--terminal-purple);
+            border-bottom: 1px solid var(--terminal-border);
+            transition: all 0.2s ease;
+        }
+
+        .reasoning-header:hover {
+            background: rgba(124, 58, 237, 0.1);
+            color: var(--terminal-text-bright);
+        }
+
+        .reasoning-content {
+            padding: 12px;
+            background: rgba(124, 58, 237, 0.05);
+            font-size: 13px;
+            line-height: 1.4;
+            color: var(--terminal-text-dim);
+            font-style: italic;
+            white-space: pre-wrap;
+            border-top: 1px solid rgba(124, 58, 237, 0.2);
+            animation: fadeIn 0.3s ease;
+        }
+
+        .reasoning-toggle-icon {
+            transition: transform 0.2s ease;
+            font-size: 10px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Enhanced message styling */
+        .message-content {
+            position: relative;
+        }
+
+        .message-content.has-reasoning {
+            border: 2px solid var(--terminal-border);
+            border-radius: 8px;
+        }
+
+        /* Reasoning indicator pulse */
+        @keyframes reasoningPulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        .reasoning-indicator {
+            animation: reasoningPulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-root" style="height: 100vh;"></div>
+
+    <!-- Ant Design JavaScript -->
+    <script src="https://unpkg.com/dayjs@1.11.7/dayjs.min.js"></script>
+    <script src="https://unpkg.com/antd@5.28.0/dist/antd.min.js"></script>
+
+    <!-- Load Components -->
+    <script src="./components/TerminalHeader.js"></script>
+    <script src="./components/LeftBar.js"></script>
+    <script src="./components/RightBar.js"></script>
+    <script src="./components/ChatInput.js"></script>
+    <script src="./components/ChatWindow.js"></script>
+    <script src="./components/MainContent.js"></script>
+    <script src="./components/BottomBar.js"></script>
+
+    <!-- Custom JavaScript -->
+    <script>
+        // Configure Tailwind for dark mode
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'mono': ['JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'monospace'],
+                    }
+                }
+            }
+        }
+
+        // Main App component using Ant Design Layout
+        class App extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = {
+                    leftCollapsed: false,
+                    rightCollapsed: false,
+                    bottomCollapsed: true
+                };
+            }
+
+            render() {
+                const { Layout, theme } = antd;
+                const { Header, Footer, Sider, Content } = Layout;
+
+                return React.createElement(Layout, {
+                    style: {
+                        height: '100vh',
+                        background: 'var(--terminal-bg)',
+                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace"
+                    }
+                }, [
+                    // Header
+                    React.createElement(Header, {
+                        key: 'header',
+                        style: {
+                            padding: 0,
+                            background: 'var(--terminal-bg-light)',
+                            borderBottom: '1px solid var(--terminal-border)',
+                            height: 'auto',
+                            lineHeight: 'normal'
+                        }
+                    }, window.TerminalHeader ? React.createElement(window.TerminalHeader) : null),
+
+                    // Main layout with sidebars
+                    React.createElement(Layout, {
+                        key: 'main-layout',
+                        style: {
+                            background: 'var(--terminal-bg)',
+                            flex: 1
+                        }
+                    }, [
+                        // Left Sidebar
+                        React.createElement(Sider, {
+                            key: 'left-sider',
+                            width: 280,
+                            collapsedWidth: 50,
+                            collapsed: this.state.leftCollapsed,
+                            trigger: null,
+                            style: {
+                                background: 'var(--terminal-bg-light)',
+                                borderRight: '1px solid var(--terminal-border)'
+                            }
+                        }, window.LeftBar ? React.createElement(window.LeftBar, {
+                            collapsed: this.state.leftCollapsed,
+                            onToggle: () => this.setState({ leftCollapsed: !this.state.leftCollapsed })
+                        }) : null),
+
+                        // Content area with potential bottom panel
+                        React.createElement(Layout, {
+                            key: 'content-layout',
+                            style: {
+                                background: 'var(--terminal-bg)',
+                                display: 'flex',
+                                flexDirection: 'column'
+                            }
+                        }, [
+                            // Main content
+                            React.createElement(Content, {
+                                key: 'main-content',
+                                style: {
+                                    background: 'var(--terminal-bg)',
+                                    flex: this.state.bottomCollapsed ? 1 : '1 1 60%',
+                                    overflow: 'hidden'
+                                }
+                            }, window.MainContent ? React.createElement(window.MainContent) : null),
+
+                            // Bottom console (conditionally rendered)
+                            !this.state.bottomCollapsed && React.createElement('div', {
+                                key: 'bottom-panel',
+                                style: {
+                                    height: '250px',
+                                    background: 'var(--terminal-bg-light)',
+                                    borderTop: '1px solid var(--terminal-border)',
+                                    flexShrink: 0
+                                }
+                            }, window.BottomBar ? React.createElement(window.BottomBar, {
+                                collapsed: this.state.bottomCollapsed,
+                                onToggle: () => this.setState({ bottomCollapsed: !this.state.bottomCollapsed })
+                            }) : null),
+
+                            // Bottom bar (always visible for toggle)
+                            this.state.bottomCollapsed && React.createElement('div', {
+                                key: 'bottom-toggle',
+                                style: {
+                                    height: '48px',
+                                    background: 'var(--terminal-bg-light)',
+                                    borderTop: '1px solid var(--terminal-border)',
+                                    flexShrink: 0
+                                }
+                            }, window.BottomBar ? React.createElement(window.BottomBar, {
+                                collapsed: this.state.bottomCollapsed,
+                                onToggle: () => this.setState({ bottomCollapsed: !this.state.bottomCollapsed })
+                            }) : null)
+                        ]),
+
+                        // Right Sidebar
+                        React.createElement(Sider, {
+                            key: 'right-sider',
+                            width: 300,
+                            collapsedWidth: 50,
+                            collapsed: this.state.rightCollapsed,
+                            reverseArrow: true,
+                            trigger: null,
+                            style: {
+                                background: 'var(--terminal-bg-light)',
+                                borderLeft: '1px solid var(--terminal-border)'
+                            }
+                        }, window.RightBar ? React.createElement(window.RightBar, {
+                            collapsed: this.state.rightCollapsed,
+                            onToggle: () => this.setState({ rightCollapsed: !this.state.rightCollapsed })
+                        }) : null)
+                    ])
+                ]);
+            }
+        }
+
+        // Render main app
+        function renderApp() {
+            const appRoot = document.getElementById('app-root');
+            if (appRoot) {
+                const appElement = React.createElement(App);
+                ReactDOM.render(appElement, appRoot);
+            }
+        }
+
+        // Initialize terminal
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 MCP Open Client Terminal initialized');
+
+            // Render main app with Ant Design Layout
+            renderApp();
+
+            // Add some terminal-like interactions
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'l') {
+                    e.preventDefault();
+                    console.clear();
+                }
+            });
+        });
+
+        // Add some typing animation effect
+        setTimeout(() => {
+            const cursor = document.querySelector('.cursor');
+            if (cursor) {
+                cursor.style.animation = 'blink 1s infinite';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

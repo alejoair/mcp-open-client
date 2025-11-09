@@ -1,3 +1,0 @@
-nicegui
-fastmcp
-openai>=1.0.0
