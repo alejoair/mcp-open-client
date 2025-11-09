@@ -1,0 +1,27 @@
+{
+  "messages": [
+    {"role": "user", "content": "Calcula 247 * 139 + 8920 / 4"}
+  ],
+  "max_tokens": 200,
+  "temperature": 0.1,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "description": "Perform mathematical calculations",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "Mathematical expression to calculate"
+            }
+          },
+          "required": ["expression"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

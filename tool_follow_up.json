@@ -1,0 +1,26 @@
+{
+  "model": "zai-glm-4.6",
+  "messages": [
+    {"role": "user", "content": "Use the calculate function to solve 247 * 139"},
+    {
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "0ea8bd81a",
+          "type": "function",
+          "function": {
+            "name": "calculate",
+            "arguments": "{\"expression\": \"247 * 139\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "0ea8bd81a",
+      "name": "calculate",
+      "content": "34333"
+    }
+  ],
+  "max_tokens": 150
+}

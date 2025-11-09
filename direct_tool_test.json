@@ -1,0 +1,27 @@
+{
+  "model": "zai-glm-4.6",
+  "messages": [
+    {"role": "user", "content": "Use the calculate function to solve 247 * 139"}
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "description": "Perform mathematical calculations",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "Mathematical expression to calculate"
+            }
+          },
+          "required": ["expression"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "required",
+  "max_tokens": 150
+}
