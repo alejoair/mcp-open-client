@@ -31,6 +31,10 @@ async def get_current_config():
         selected = config.get('selected_configuration', {})
         ui = config.get('ui', {})
 
+        # Ensure max_tokens has a default value if missing
+        if 'max_tokens' not in selected:
+            selected['max_tokens'] = 1000
+
         return CurrentConfigResponse(
             selected_configuration=SelectedConfiguration(**selected),
             ui=UIConfig(**ui)
@@ -149,6 +153,9 @@ async def update_selected_config(request: UpdateConfigRequest):
 
         if request.small_model is not None:
             update_data['small_model'] = request.small_model
+
+        if request.max_tokens is not None:
+            update_data['max_tokens'] = request.max_tokens
 
         success = config_manager.update_selected_config(**update_data)
 

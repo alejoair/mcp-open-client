@@ -20,6 +20,7 @@ class SelectedConfiguration(BaseModel):
     provider_id: str
     main_model: str
     small_model: str
+    max_tokens: int = 1000
 
 class UIConfig(BaseModel):
     left_sidebar_collapsed: bool
@@ -36,6 +37,7 @@ class UpdateConfigRequest(BaseModel):
     provider_id: Optional[str] = None
     main_model: Optional[str] = None
     small_model: Optional[str] = None
+    max_tokens: Optional[int] = None
 
 class UpdateUIConfigRequest(BaseModel):
     left_sidebar_collapsed: Optional[bool] = None

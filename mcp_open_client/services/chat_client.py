@@ -213,9 +213,6 @@ class ChatClient:
                                             yield {"type": "content", "content": content}
                                         elif text:
                                             yield {"type": "content", "content": text}
-                                        elif reasoning:
-                                            # If only reasoning and no content, treat reasoning as main content
-                                            yield {"type": "content", "content": reasoning}
                             except json.JSONDecodeError:
                                 continue
                 else:
