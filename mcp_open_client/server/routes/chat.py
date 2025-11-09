@@ -123,11 +123,24 @@ async def chat_completions_stream(request: ChatCompletionRequest):
             # Import here to avoid circular dependencies
             from mcp_open_client.services.chat_client import ChatClient
 
-            # Convert ChatMessage objects to dictionaries
-            messages_dict = [
-                {"role": msg.role, "content": msg.content}
-                for msg in request.messages
-            ]
+            # Convert ChatMessage objects to dictionaries with tool call support
+            messages_dict = []
+            for msg in request.messages:
+                msg_dict = {"role": msg.role}
+                if msg.content:
+                    msg_dict["content"] = msg.content
+                if msg.tool_calls:
+                    msg_dict["tool_calls"] = [tc.dict() for tc in msg.tool_calls]
+                if msg.tool_call_id:
+                    msg_dict["tool_call_id"] = msg.tool_call_id
+                if msg.name:
+                    msg_dict["name"] = msg.name
+                messages_dict.append(msg_dict)
+
+            # Prepare tools for the request if provided
+            tools_dict = None
+            if request.tools:
+                tools_dict = [tool.dict() for tool in request.tools]
 
             # Start streaming response
             yield "data: {\"type\": \"start\"}\n\n"
@@ -136,6 +149,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
             async with ChatClient() as client:
                 accumulated_content = ""
                 accumulated_reasoning = ""
+                active_tool_calls = {}
 
                 async for data_chunk in client.create_streaming_completion(
                     provider_id=provider_id,
@@ -143,10 +157,12 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     messages=messages_dict,
                     api_key=api_key,
                     max_tokens=request.max_tokens,
-                    temperature=request.temperature
+                    temperature=request.temperature,
+                    tools=tools_dict,
+                    tool_choice=request.tool_choice
                 ):
                     if isinstance(data_chunk, dict):
-                        # Handle structured data with separate reasoning/content
+                        # Handle structured data with separate reasoning/content/tool_calls
                         chunk_type = data_chunk.get("type", "content")
                         chunk_content = data_chunk.get("content", "")
 
@@ -156,6 +172,32 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                                 "type": "reasoning_chunk",
                                 "content": chunk_content,
                                 "accumulated_reasoning": accumulated_reasoning
+                            }
+                        elif chunk_type == "tool_call_start":
+                            # Start accumulating a new tool call
+                            tool_call_id = data_chunk.get("tool_call_id")
+                            function_name = data_chunk.get("function_name")
+                            active_tool_calls[tool_call_id] = {
+                                "id": tool_call_id,
+                                "function_name": function_name,
+                                "arguments": ""
+                            }
+                            chunk_data = {
+                                "type": "tool_call_start",
+                                "tool_call_id": tool_call_id,
+                                "function_name": function_name
+                            }
+                        elif chunk_type == "tool_call_arguments":
+                            # Add arguments to existing tool call
+                            tool_call_id = data_chunk.get("tool_call_id")
+                            arguments = data_chunk.get("arguments", "")
+                            if tool_call_id in active_tool_calls:
+                                active_tool_calls[tool_call_id]["arguments"] += arguments
+                            chunk_data = {
+                                "type": "tool_call_arguments",
+                                "tool_call_id": tool_call_id,
+                                "arguments": arguments,
+                                "full_arguments": active_tool_calls.get(tool_call_id, {}).get("arguments", "")
                             }
                         else:  # content
                             accumulated_content += chunk_content
@@ -175,18 +217,54 @@ async def chat_completions_stream(request: ChatCompletionRequest):
 
                     yield f"data: {json.dumps(chunk_data)}\n\n"
 
+            # Execute tool calls if any were detected
+            tool_results = []
+            if active_tool_calls:
+                logger.info(f"🔧 Executing {len(active_tool_calls)} tool calls")
+
+                # Import tool simulator
+                from mcp_open_client.services.tool_simulator import tool_simulator
+
+                for tool_call_id, tool_call in active_tool_calls.items():
+                    # Signal tool execution start
+                    yield f"data: {json.dumps({'type': 'tool_execution_start', 'tool_call_id': tool_call_id, 'function_name': tool_call['function_name']})}\n\n"
+
+                    # Execute the tool
+                    try:
+                        result = await tool_simulator.execute_tool(
+                            tool_call_id=tool_call_id,
+                            name=tool_call['function_name'],
+                            arguments=tool_call['arguments']
+                        )
+                        tool_results.append(result)
+
+                        # Signal tool execution completion
+                        yield f"data: {json.dumps({'type': 'tool_execution_complete', 'tool_result': result})}\n\n"
+
+                    except Exception as e:
+                        error_result = {
+                            "tool_call_id": tool_call_id,
+                            "name": tool_call['function_name'],
+                            "content": f"Error executing tool: {str(e)}",
+                            "status": "error"
+                        }
+                        tool_results.append(error_result)
+                        yield f"data: {json.dumps({'type': 'tool_execution_error', 'tool_result': error_result})}\n\n"
+
             # Send completion signal
             completion_data = {
                 "type": "complete",
                 "final_content": accumulated_content,
                 "final_reasoning": accumulated_reasoning,
+                "tool_calls": list(active_tool_calls.values()) if active_tool_calls else None,
+                "tool_results": tool_results if tool_results else None,
                 "model": main_model,
                 "provider": provider_id,
                 "message_count": len(request.messages)
             }
             yield f"data: {json.dumps(completion_data)}\n\n"
 
-            logger.info(f"✅ Streaming chat completed: {len(accumulated_content)} content chars, {len(accumulated_reasoning)} reasoning chars")
+            logger.info(f"✅ Streaming chat completed: {len(accumulated_content)} content chars, {len(accumulated_reasoning)} reasoning chars, {len(tool_results)} tool results")
 
         except Exception as e:
             logger.error(f"Streaming chat completion failed: {e}")

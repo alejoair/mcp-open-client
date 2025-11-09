@@ -108,10 +108,12 @@ class ChatClient:
         self,
         provider_id: str,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         api_key: str,
         max_tokens: int = 1000,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: str = "auto"
     ):
         """Create streaming chat completion using provider API"""
         import json
@@ -132,14 +134,16 @@ class ChatClient:
             # Prepare OpenAI-compatible request payload with streaming
             payload = {
                 "model": model,
-                "messages": [
-                    {"role": msg["role"], "content": msg["content"]}
-                    for msg in messages
-                ],
+                "messages": messages,  # Already formatted properly
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "stream": True
             }
+
+            # Add tools if provided
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = tool_choice
 
             logger.info(f"🚀 Streaming chat request to: {base_url}/chat/completions")
 
@@ -169,11 +173,32 @@ class ChatClient:
                             try:
                                 data = json.loads(data_str)
 
-                                # Extract delta content and reasoning separately
+                                # Extract delta content, reasoning, and tool calls separately
                                 if "choices" in data and len(data["choices"]) > 0:
                                     choice = data["choices"][0]
                                     if "delta" in choice:
                                         delta = choice["delta"]
+
+                                        # Check for tool calls first
+                                        if "tool_calls" in delta:
+                                            tool_calls = delta["tool_calls"]
+                                            if tool_calls and len(tool_calls) > 0:
+                                                for tool_call in tool_calls:
+                                                    if "function" in tool_call:
+                                                        function_data = tool_call["function"]
+                                                        # Handle incremental tool call data
+                                                        if "name" in function_data:
+                                                            yield {
+                                                                "type": "tool_call_start",
+                                                                "tool_call_id": tool_call.get("id", ""),
+                                                                "function_name": function_data["name"]
+                                                            }
+                                                        elif "arguments" in function_data:
+                                                            yield {
+                                                                "type": "tool_call_arguments",
+                                                                "tool_call_id": tool_call.get("id", ""),
+                                                                "arguments": function_data["arguments"]
+                                                            }
 
                                         # Check for different content types
                                         content = delta.get("content", "")
