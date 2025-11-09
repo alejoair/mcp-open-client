@@ -68,18 +68,47 @@ class CurrentConfigResponse(BaseModel):
     selected_configuration: SelectedConfiguration
     ui: UIConfig
 
+# Tool Models
+class ToolFunction(BaseModel):
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+
+class Tool(BaseModel):
+    type: str = "function"
+    function: ToolFunction
+
+class ToolCall(BaseModel):
+    id: str
+    type: str = "function"
+    function: Dict[str, Any]  # {"name": str, "arguments": str}
+
+class ToolResult(BaseModel):
+    tool_call_id: str
+    name: str
+    content: str
+    status: str = "success"  # "success", "error"
+    execution_time: Optional[float] = None
+
 # Chat Models
 class ChatMessage(BaseModel):
-    role: str  # "user", "assistant", "system"
-    content: str
+    role: str  # "user", "assistant", "system", "tool"
+    content: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    tool_call_id: Optional[str] = None  # For tool result messages
+    name: Optional[str] = None  # Tool name for tool messages
 
 class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     max_tokens: Optional[int] = 1000
     temperature: Optional[float] = 0.7
+    tools: Optional[List[Tool]] = None
+    tool_choice: Optional[str] = "auto"  # "auto", "none", "required", or specific tool
 
 class ChatCompletionResponse(BaseModel):
     response: str
     model: str
     provider: str
     message_count: int
+    tool_calls: Optional[List[ToolCall]] = None
+    tool_results: Optional[List[ToolResult]] = None
