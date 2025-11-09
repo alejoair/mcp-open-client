@@ -12,6 +12,8 @@ from mcp_open_client.server.models import (
     ChatCompletionResponse,
     ChatMessage
 )
+from mcp_open_client.services.default_tools import get_default_tools
+from mcp_open_client.services.tool_call_handler import tool_call_handler
 
 logger = logging.getLogger(__name__)
 
@@ -23,341 +25,236 @@ async def chat_completions(request: ChatCompletionRequest):
     try:
         # Get current configuration
         config = config_manager.get_config()
-        selected = config.get('selected_configuration', {})
+        selected_config = config.get('selected_configuration', {})
 
-        provider_id = selected.get('provider_id')
-        main_model = selected.get('main_model')
+        if not selected_config.get('provider_id'):
+            raise HTTPException(status_code=400, detail="No provider selected")
+        if not selected_config.get('main_model'):
+            raise HTTPException(status_code=400, detail="No model selected")
 
-        if not provider_id:
-            raise HTTPException(status_code=400, detail="No provider configured")
-
-        if not main_model:
-            raise HTTPException(status_code=400, detail="No main model configured")
-
-        # Get provider configuration
-        provider = config_manager.get_provider(provider_id)
-        if not provider:
-            raise HTTPException(status_code=404, detail=f"Provider {provider_id} not found")
-
-        # Get API key
-        api_key = config_manager.get_provider_api_key(provider_id)
-        if not api_key:
-            raise HTTPException(status_code=400, detail=f"No API key configured for {provider_id}")
-
-        # Get configured max_tokens
-        configured_max_tokens = config_manager.get_max_tokens()
-
-        logger.info(f"🤖 Chat request: {len(request.messages)} messages to {provider_id}/{main_model}, max_tokens: {configured_max_tokens}")
+        logger.info(f"Chat completion request for {len(request.messages)} messages")
+        logger.info(f"Using provider: {selected_config['provider_id']}, model: {selected_config['main_model']}")
 
         # Import here to avoid circular dependencies
         from mcp_open_client.services.chat_client import ChatClient
 
-        # Convert ChatMessage objects to dictionaries
-        messages_dict = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.messages
-        ]
-
-        # Make chat completion request to provider using async context manager
         async with ChatClient() as client:
-            response_text = await client.create_completion(
-                provider_id=provider_id,
-                model=main_model,
-                messages=messages_dict,
-                api_key=api_key,
-                max_tokens=configured_max_tokens,
-                temperature=request.temperature
-            )
-
-        if not response_text:
-            raise HTTPException(status_code=500, detail="Empty response from LLM provider")
-
-        logger.info(f"✅ Chat response received: {len(response_text)} characters")
-
-        return ChatCompletionResponse(
-            response=response_text,
-            model=main_model,
-            provider=provider_id,
-            message_count=len(request.messages)
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Chat completion failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/completions/stream")
-async def chat_completions_stream(request: ChatCompletionRequest):
-    """Streaming chat completion endpoint - sends user message to LLM provider with real-time streaming"""
-
-    async def generate_stream():
-        try:
-            # Get current configuration
-            config = config_manager.get_config()
-            selected = config.get('selected_configuration', {})
-
-            provider_id = selected.get('provider_id')
-            main_model = selected.get('main_model')
-
-            if not provider_id:
-                yield f"data: {json.dumps({'error': 'No provider configured'})}\n\n"
-                return
-
-            if not main_model:
-                yield f"data: {json.dumps({'error': 'No main model configured'})}\n\n"
-                return
-
-            # Get provider configuration
-            provider = config_manager.get_provider(provider_id)
-            if not provider:
-                yield f"data: {json.dumps({'error': f'Provider {provider_id} not found'})}\n\n"
-                return
-
-            # Get API key
-            api_key = config_manager.get_provider_api_key(provider_id)
-            if not api_key:
-                yield f"data: {json.dumps({'error': f'No API key configured for {provider_id}'})}\n\n"
-                return
-
-            # Get configured max_tokens
-            configured_max_tokens = config_manager.get_max_tokens()
-
-            logger.info(f"🤖 Streaming chat request: {len(request.messages)} messages to {provider_id}/{main_model}, max_tokens: {configured_max_tokens}")
-
-            # Import here to avoid circular dependencies
-            from mcp_open_client.services.chat_client import ChatClient
-
-            # Convert ChatMessage objects to dictionaries with tool call support
+            # Convert ChatMessage objects to dictionaries
             messages_dict = []
             for msg in request.messages:
                 msg_dict = {"role": msg.role}
                 if msg.content:
                     msg_dict["content"] = msg.content
                 if msg.tool_calls:
-                    msg_dict["tool_calls"] = [tc.dict() for tc in msg.tool_calls]
+                    msg_dict["tool_calls"] = [
+                        {
+                            "id": tc.id,
+                            "type": tc.type,
+                            "function": tc.function
+                        } for tc in msg.tool_calls
+                    ]
                 if msg.tool_call_id:
                     msg_dict["tool_call_id"] = msg.tool_call_id
-                if msg.name:
-                    msg_dict["name"] = msg.name
                 messages_dict.append(msg_dict)
 
-            # Prepare tools for the request - always include default test tools
-            default_tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "calculate",
-                        "description": "Perform mathematical calculations",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "expression": {
-                                    "type": "string",
-                                    "description": "Mathematical expression to calculate"
-                                }
-                            },
-                            "required": ["expression"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_current_time",
-                        "description": "Get the current time and date",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "timezone": {
-                                    "type": "string",
-                                    "description": "Timezone (default: UTC)"
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_web",
-                        "description": "Search the web for information",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "Search query"
-                                }
-                            },
-                            "required": ["query"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather",
-                        "description": "Get weather information for a location",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": {
-                                    "type": "string",
-                                    "description": "Location to get weather for"
-                                }
-                            },
-                            "required": ["location"]
-                        }
-                    }
+            # Add tools to the request
+            tools = get_default_tools()
+
+            # Get API key for ChatClient
+            api_key = config_manager.get_provider_api_key(selected_config['provider_id'])
+
+            # Make request to provider
+            response = await client.create_completion(
+                provider_id=selected_config['provider_id'],
+                model=selected_config['main_model'],
+                api_key=api_key,
+                messages=messages_dict,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                tools=tools
+            )
+
+            return ChatCompletionResponse(
+                id=response.get('id', 'chatcmpl-' + str(hash(str(messages_dict)))),
+                object="chat.completion",
+                choices=[{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": response.get('content', ''),
+                    },
+                    "finish_reason": "stop"
+                }],
+                usage={
+                    "prompt_tokens": response.get('usage', {}).get('prompt_tokens', 0),
+                    "completion_tokens": response.get('usage', {}).get('completion_tokens', 0),
+                    "total_tokens": response.get('usage', {}).get('total_tokens', 0)
                 }
-            ]
+            )
 
-            tools_dict = default_tools
-            if request.tools:
-                # Add any additional tools from the request
-                tools_dict.extend([tool.dict() for tool in request.tools])
+    except Exception as e:
+        logger.error(f"Chat completion error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-            # Start streaming response
-            yield "data: {\"type\": \"start\"}\n\n"
+@router.post("/completions/stream")
+async def stream_chat_completions(request: ChatCompletionRequest):
+    """Streaming chat completion endpoint with full tool call support"""
 
-            # Make streaming chat completion request to provider
+    async def generate():
+        try:
+            # Get current configuration
+            config = config_manager.get_config()
+            selected_config = config.get('selected_configuration', {})
+
+            if not selected_config.get('provider_id'):
+                yield f"data: {json.dumps({'type': 'error', 'error': 'No provider selected'})}\n\n"
+                return
+            if not selected_config.get('main_model'):
+                yield f"data: {json.dumps({'type': 'error', 'error': 'No model selected'})}\n\n"
+                return
+
+            logger.info(f"Streaming chat completion for {len(request.messages)} messages")
+            logger.info(f"Using provider: {selected_config['provider_id']}, model: {selected_config['main_model']}")
+
+            # Import here to avoid circular dependencies
+            from mcp_open_client.services.chat_client import ChatClient
+
+            # Convert ChatMessage objects to dictionaries
+            messages_dict = []
+            for msg in request.messages:
+                msg_dict = {"role": msg.role}
+                if msg.content:
+                    msg_dict["content"] = msg.content
+                if msg.tool_calls:
+                    msg_dict["tool_calls"] = [
+                        {
+                            "id": tc.id,
+                            "type": tc.type,
+                            "function": tc.function
+                        } for tc in msg.tool_calls
+                    ]
+                if msg.tool_call_id:
+                    msg_dict["tool_call_id"] = msg.tool_call_id
+                messages_dict.append(msg_dict)
+
+            # Add tools to the request
+            tools = get_default_tools()
+
+            # Track tool calls and accumulated content
+            active_tool_calls = {}
+            accumulated_content = ""
+            accumulated_reasoning = ""
+
+            # Stream initial response from model
             async with ChatClient() as client:
-                accumulated_content = ""
-                accumulated_reasoning = ""
-                active_tool_calls = {}
+                # Get API key for ChatClient
+                api_key = config_manager.get_provider_api_key(selected_config['provider_id'])
 
-                async for data_chunk in client.create_streaming_completion(
-                    provider_id=provider_id,
-                    model=main_model,
-                    messages=messages_dict,
+                async for chunk in client.create_streaming_completion(
+                    provider_id=selected_config['provider_id'],
+                    model=selected_config['main_model'],
                     api_key=api_key,
-                    max_tokens=configured_max_tokens,
+                    messages=messages_dict,
                     temperature=request.temperature,
-                    tools=tools_dict,
-                    tool_choice="auto"  # Use "auto" to allow model to decide when to use tools
+                    max_tokens=request.max_tokens,
+                    tools=tools
                 ):
-                    if isinstance(data_chunk, dict):
-                        # Handle structured data with separate reasoning/content/tool_calls
-                        chunk_type = data_chunk.get("type", "content")
-                        chunk_content = data_chunk.get("content", "")
+                    if chunk['type'] == 'reasoning':
+                        accumulated_reasoning += chunk.get('content', '')
+                        yield f"data: {json.dumps({'type': 'reasoning_chunk', 'content': chunk.get('content', ''), 'accumulated_reasoning': accumulated_reasoning})}\n\n"
 
-                        if chunk_type == "reasoning":
-                            accumulated_reasoning += chunk_content
-                            chunk_data = {
-                                "type": "reasoning_chunk",
-                                "content": chunk_content,
-                                "accumulated_reasoning": accumulated_reasoning
-                            }
-                        elif chunk_type == "tool_call_start":
-                            # Start accumulating a new tool call
-                            tool_call_id = data_chunk.get("tool_call_id")
-                            function_name = data_chunk.get("function_name")
+                    elif chunk['type'] == 'content':
+                        accumulated_content += chunk.get('content', '')
+                        yield f"data: {json.dumps({'type': 'content_chunk', 'content': chunk.get('content', ''), 'accumulated_content': accumulated_content})}\n\n"
+
+                    elif chunk['type'] == 'tool_call_start':
+                        # Handle incremental tool call start
+                        tool_call_id = chunk.get('tool_call_id', '')
+                        function_name = chunk.get('function_name', '')
+
+                        if tool_call_id:
                             active_tool_calls[tool_call_id] = {
-                                "id": tool_call_id,
-                                "function_name": function_name,
-                                "arguments": ""
+                                'function_name': function_name,
+                                'arguments': ''
                             }
-                            chunk_data = {
-                                "type": "tool_call_start",
-                                "tool_call_id": tool_call_id,
-                                "function_name": function_name
-                            }
-                        elif chunk_type == "tool_call_arguments":
-                            # Add arguments to existing tool call
-                            tool_call_id = data_chunk.get("tool_call_id")
-                            arguments = data_chunk.get("arguments", "")
-                            if tool_call_id in active_tool_calls:
-                                active_tool_calls[tool_call_id]["arguments"] += arguments
-                            chunk_data = {
-                                "type": "tool_call_arguments",
-                                "tool_call_id": tool_call_id,
-                                "arguments": arguments,
-                                "full_arguments": active_tool_calls.get(tool_call_id, {}).get("arguments", "")
-                            }
-                        else:  # content
-                            accumulated_content += chunk_content
-                            chunk_data = {
-                                "type": "content_chunk",
-                                "content": chunk_content,
-                                "accumulated_content": accumulated_content
-                            }
-                    else:
-                        # Handle legacy string chunks
-                        accumulated_content += data_chunk
-                        chunk_data = {
-                            "type": "content_chunk",
-                            "content": data_chunk,
-                            "accumulated_content": accumulated_content
-                        }
 
-                    yield f"data: {json.dumps(chunk_data)}\n\n"
+                        # Yield tool call start event with initial arguments
+                        yield f"data: {json.dumps({'type': 'tool_call_start', 'tool_call_id': tool_call_id, 'function_name': function_name, 'arguments': ''})}\n\n"
 
-            # Execute tool calls if any were detected
-            tool_results = []
+                    elif chunk['type'] == 'tool_call_arguments':
+                        # Handle incremental tool call arguments
+                        tool_call_id = chunk.get('tool_call_id', '')
+                        arguments = chunk.get('arguments', '')
+
+                        if tool_call_id in active_tool_calls:
+                            active_tool_calls[tool_call_id]['arguments'] += arguments
+
+                            # Yield tool call arguments update event to frontend
+                            yield f"data: {json.dumps({'type': 'tool_call_arguments', 'tool_call_id': tool_call_id, 'arguments': arguments, 'accumulated_arguments': active_tool_calls[tool_call_id]['arguments']})}\n\n"
+
+            # Handle tool execution and recursive followup
             if active_tool_calls:
-                logger.info(f"🔧 Executing {len(active_tool_calls)} tool calls")
-
-                # Import tool simulator
-                from mcp_open_client.services.tool_simulator import tool_simulator
-
+                # Validate and cleanup tool calls before processing
+                valid_tool_calls = {}
                 for tool_call_id, tool_call in active_tool_calls.items():
-                    # Signal tool execution start
-                    yield f"data: {json.dumps({'type': 'tool_execution_start', 'tool_call_id': tool_call_id, 'function_name': tool_call['function_name']})}\n\n"
+                    # Ensure arguments is valid JSON
+                    arguments = tool_call.get('arguments', '').strip()
+                    if not arguments:
+                        arguments = '{}'
 
-                    # Execute the tool
+                    # Validate JSON format
                     try:
-                        result = await tool_simulator.execute_tool(
-                            tool_call_id=tool_call_id,
-                            name=tool_call['function_name'],
-                            arguments=tool_call['arguments']
-                        )
-                        tool_results.append(result)
-
-                        # Signal tool execution completion
-                        yield f"data: {json.dumps({'type': 'tool_execution_complete', 'tool_result': result})}\n\n"
-
-                    except Exception as e:
-                        error_result = {
-                            "tool_call_id": tool_call_id,
-                            "name": tool_call['function_name'],
-                            "content": f"Error executing tool: {str(e)}",
-                            "status": "error"
+                        json.loads(arguments)
+                        valid_tool_calls[tool_call_id] = {
+                            'function_name': tool_call.get('function_name', ''),
+                            'arguments': arguments
                         }
-                        tool_results.append(error_result)
-                        yield f"data: {json.dumps({'type': 'tool_execution_error', 'tool_result': error_result})}\n\n"
+                    except json.JSONDecodeError:
+                        logger.warning(f"⚠️ Invalid JSON arguments for tool {tool_call_id}: {arguments}")
+                        # Use empty object for invalid JSON
+                        valid_tool_calls[tool_call_id] = {
+                            'function_name': tool_call.get('function_name', ''),
+                            'arguments': '{}'
+                        }
 
-            # Send completion signal
-            completion_data = {
-                "type": "complete",
-                "final_content": accumulated_content,
-                "final_reasoning": accumulated_reasoning,
-                "tool_calls": list(active_tool_calls.values()) if active_tool_calls else None,
-                "tool_results": tool_results if tool_results else None,
-                "model": main_model,
-                "provider": provider_id,
-                "message_count": len(request.messages)
-            }
-            yield f"data: {json.dumps(completion_data)}\n\n"
+                if valid_tool_calls:
+                    logger.info(f"🔧 Processing {len(valid_tool_calls)} valid tool calls with recursive followup")
 
-            logger.info(f"✅ Streaming chat completed: {len(accumulated_content)} content chars, {len(accumulated_reasoning)} reasoning chars, {len(tool_results)} tool results")
+                    # Log detailed tool call information
+                    for tool_call_id, tool_call in valid_tool_calls.items():
+                        function_name = tool_call.get('function_name', '')
+                        arguments = tool_call.get('arguments', '{}')
+                        logger.info(f"📋 Tool Call: {function_name} | ID: {tool_call_id} | Arguments: {arguments}")
+
+                    # Get API key
+                    api_key = config_manager.get_provider_api_key(selected_config['provider_id'])
+
+                    async for event in tool_call_handler.execute_tool_calls_with_followup(
+                        active_tool_calls=valid_tool_calls,
+                        messages=messages_dict,
+                        provider_id=selected_config['provider_id'],
+                        model=selected_config['main_model'],
+                        api_key=api_key,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens
+                    ):
+                        yield event
+
+            else:
+                # No tool calls, send completion signal
+                completion_data = {
+                    "type": "complete",
+                    "final_content": accumulated_content,
+                    "final_reasoning": accumulated_reasoning,
+                    "tool_calls": [],
+                    "tool_results": []
+                }
+                yield f"data: {json.dumps(completion_data)}\n\n"
+
+            yield "data: [DONE]\n\n"
 
         except Exception as e:
-            logger.error(f"Streaming chat completion failed: {e}")
-            error_data = {"type": "error", "error": str(e)}
-            yield f"data: {json.dumps(error_data)}\n\n"
+            logger.error(f"Streaming chat error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
-        # End the stream
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        generate_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
+    return StreamingResponse(generate(), media_type="text/event-stream")

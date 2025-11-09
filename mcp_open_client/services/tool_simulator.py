@@ -14,6 +14,7 @@ class ToolSimulator:
 
     def __init__(self):
         self.tools = {
+            "respond_to_user": self._respond_to_user,
             "calculate": self._calculate,
             "get_current_time": self._get_current_time,
             "search_web": self._search_web,
@@ -82,6 +83,13 @@ class ToolSimulator:
         """Simulate realistic tool execution delay"""
         delay = random.uniform(0.5, 2.0)  # 0.5-2 seconds
         await asyncio.sleep(delay)
+
+    async def _respond_to_user(self, args: Dict[str, Any]) -> str:
+        """General response tool - allows model to respond directly to user"""
+        response = args.get("response", "")
+        if not response:
+            return "Error: No response provided"
+        return response
 
     async def _calculate(self, args: Dict[str, Any]) -> str:
         """Simulate calculator tool"""
