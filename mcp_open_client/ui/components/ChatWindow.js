@@ -66,7 +66,6 @@ class ChatWindow extends React.Component {
                 },
                 body: JSON.stringify({
                     messages: [...this.state.messages, userMessage].filter(msg => !msg.isStreaming),
-                    max_tokens: 1000,
                     temperature: 0.7
                 })
             });

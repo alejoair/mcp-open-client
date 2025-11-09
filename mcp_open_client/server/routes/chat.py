@@ -44,7 +44,10 @@ async def chat_completions(request: ChatCompletionRequest):
         if not api_key:
             raise HTTPException(status_code=400, detail=f"No API key configured for {provider_id}")
 
-        logger.info(f"🤖 Chat request: {len(request.messages)} messages to {provider_id}/{main_model}")
+        # Get configured max_tokens
+        configured_max_tokens = config_manager.get_max_tokens()
+
+        logger.info(f"🤖 Chat request: {len(request.messages)} messages to {provider_id}/{main_model}, max_tokens: {configured_max_tokens}")
 
         # Import here to avoid circular dependencies
         from mcp_open_client.services.chat_client import ChatClient
@@ -62,7 +65,7 @@ async def chat_completions(request: ChatCompletionRequest):
                 model=main_model,
                 messages=messages_dict,
                 api_key=api_key,
-                max_tokens=request.max_tokens,
+                max_tokens=configured_max_tokens,
                 temperature=request.temperature
             )
 
@@ -118,7 +121,10 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                 yield f"data: {json.dumps({'error': f'No API key configured for {provider_id}'})}\n\n"
                 return
 
-            logger.info(f"🤖 Streaming chat request: {len(request.messages)} messages to {provider_id}/{main_model}")
+            # Get configured max_tokens
+            configured_max_tokens = config_manager.get_max_tokens()
+
+            logger.info(f"🤖 Streaming chat request: {len(request.messages)} messages to {provider_id}/{main_model}, max_tokens: {configured_max_tokens}")
 
             # Import here to avoid circular dependencies
             from mcp_open_client.services.chat_client import ChatClient
@@ -227,7 +233,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     model=main_model,
                     messages=messages_dict,
                     api_key=api_key,
-                    max_tokens=request.max_tokens,
+                    max_tokens=configured_max_tokens,
                     temperature=request.temperature,
                     tools=tools_dict,
                     tool_choice="auto"  # Use "auto" to allow model to decide when to use tools

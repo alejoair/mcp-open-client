@@ -165,10 +165,19 @@ class ConfigManager:
         selected = self._config.setdefault('selected_configuration', {})
 
         for key, value in kwargs.items():
-            if key in ['provider_id', 'main_model', 'small_model']:
+            if key in ['provider_id', 'main_model', 'small_model', 'max_tokens']:
                 selected[key] = value
 
         return self.save_config()
+
+    def get_max_tokens(self) -> int:
+        """Get configured max_tokens for current selection"""
+        selected = self.get_selected_config()
+        return selected.get('max_tokens', 1000)
+
+    def set_max_tokens(self, max_tokens: int) -> bool:
+        """Set max_tokens for current selection"""
+        return self.update_selected_config(max_tokens=max_tokens)
 
     def add_provider(self, provider_data: Dict[str, Any]) -> bool:
         """Add a new provider to configuration"""
@@ -321,7 +330,8 @@ class ConfigManager:
             "selected_configuration": {
                 "provider_id": "",
                 "main_model": "",
-                "small_model": ""
+                "small_model": "",
+                "max_tokens": 1000
             },
             "ui": {
                 "left_sidebar_collapsed": False,

@@ -16,6 +16,7 @@ class LeftBar extends React.Component {
             apiKeyVisible: false,
             mainModel: '',
             smallModel: '',
+            maxTokens: 1000,
             availableModels: [],
             modelsLoading: false,
             configLoading: false,
@@ -50,7 +51,8 @@ class LeftBar extends React.Component {
                 this.setState({
                     selectedProvider: selectedConfig.provider_id || '',
                     mainModel: selectedConfig.main_model || '',
-                    smallModel: selectedConfig.small_model || ''
+                    smallModel: selectedConfig.small_model || '',
+                    maxTokens: selectedConfig.max_tokens || 1000
                 });
             }
 
@@ -204,6 +206,14 @@ class LeftBar extends React.Component {
         }
     }
 
+    onMaxTokensChange = (value) => {
+        // Validate max_tokens value
+        const numValue = parseInt(value);
+        if (!isNaN(numValue) && numValue > 0 && numValue <= 32000) {
+            this.setState({ maxTokens: numValue });
+        }
+    }
+
     onApiKeySubmit = async () => {
         if (!this.state.apiKeyInput || !this.state.selectedProvider) return;
 
@@ -290,7 +300,8 @@ class LeftBar extends React.Component {
             const updateData = {
                 provider_id: this.state.selectedProvider,
                 main_model: this.state.mainModel || '',
-                small_model: this.state.smallModel || ''
+                small_model: this.state.smallModel || '',
+                max_tokens: this.state.maxTokens
             };
 
             console.log('Saving configuration:', updateData);
@@ -515,6 +526,42 @@ class LeftBar extends React.Component {
                                 return options;
                             })()
                         })
+                    ]),
+
+                    // Max Tokens Configuration
+                    this.state.selectedProvider && React.createElement('div', { key: 'maxtokens-section', style: { marginBottom: '16px' } }, [
+                        React.createElement('label', {
+                            key: 'maxtokens-label',
+                            style: {
+                                display: 'block',
+                                color: 'var(--terminal-cyan)',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                marginBottom: '6px'
+                            }
+                        }, 'Max Tokens:'),
+                        React.createElement(antd.InputNumber, {
+                            key: 'maxtokens-input',
+                            value: this.state.maxTokens,
+                            onChange: this.onMaxTokensChange,
+                            min: 1,
+                            max: 32000,
+                            step: 100,
+                            placeholder: '1000',
+                            style: {
+                                width: '100%',
+                                fontFamily: 'inherit'
+                            },
+                            size: 'small'
+                        }),
+                        React.createElement('div', {
+                            key: 'maxtokens-hint',
+                            style: {
+                                fontSize: '10px',
+                                color: 'var(--terminal-text-muted)',
+                                marginTop: '2px'
+                            }
+                        }, 'Maximum tokens in response (1-32000)')
                     ]),
 
                     // Save Configuration Button
