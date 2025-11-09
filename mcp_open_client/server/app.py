@@ -14,6 +14,9 @@ from mcp_open_client.config import config_manager
 # Import routers
 from mcp_open_client.server.routes import config_router
 from mcp_open_client.server.routes import chat_router
+from mcp_open_client.server.routes.mcp_servers import router as mcp_servers_router
+from mcp_open_client.server.routes.mcp_tools import router as mcp_tools_router
+from mcp_open_client.server.routes.mcp_system import router as mcp_system_router
 
 
 def create_app(web_dir: Optional[Path] = None, config_file: Optional[Path] = None) -> FastAPI:
@@ -36,6 +39,11 @@ def create_app(web_dir: Optional[Path] = None, config_file: Optional[Path] = Non
     # Include API routers
     app.include_router(config_router)
     app.include_router(chat_router)
+
+    # Include MCP management routers
+    app.include_router(mcp_servers_router)
+    app.include_router(mcp_tools_router)
+    app.include_router(mcp_system_router)
 
     @app.get("/")
     async def root():

@@ -16,7 +16,7 @@ class ConfigManager:
     """Global configuration manager with encryption support"""
 
     def __init__(self):
-        self.config_dir = Path(__file__).parent
+        self.config_dir = Path(os.path.expanduser("~/.mcp-open-client"))
         self.config_file = self.config_dir / "app_config.json"
         self.key_file = self.config_dir / ".encryption_key"
         self._config: Dict[str, Any] = {}
