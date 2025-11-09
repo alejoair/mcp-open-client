@@ -1,6 +1,0 @@
-{
-  "messages": [
-    {"role": "user", "content": "Please use the calculate tool to solve 15 * 24 + 8"}
-  ],
-  "max_tokens": 150
-}

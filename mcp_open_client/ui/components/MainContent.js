@@ -7,36 +7,10 @@ class MainContent extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            currentView: 'chat', // Default to chat view
-            messages: [
-                {
-                    id: 1,
-                    type: 'system',
-                    content: 'MCP Open Client initialized successfully',
-                    timestamp: new Date().toLocaleTimeString()
-                },
-                {
-                    id: 2,
-                    type: 'info',
-                    content: 'Ready to connect to MCP servers',
-                    timestamp: new Date().toLocaleTimeString()
-                }
-            ]
+            currentView: 'chat' // Default to chat view
         };
     }
 
-    addMessage = (type, content) => {
-        const newMessage = {
-            id: Date.now(),
-            type,
-            content,
-            timestamp: new Date().toLocaleTimeString()
-        };
-
-        this.setState(prevState => ({
-            messages: [...prevState.messages, newMessage]
-        }));
-    }
 
     renderWelcomeView = () => {
         return React.createElement('div', {
@@ -173,101 +147,6 @@ class MainContent extends React.Component {
         ]);
     }
 
-    renderChatView = () => {
-        const { messages } = this.state;
-
-        return React.createElement('div', {
-            className: 'chat-view',
-            style: {
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column'
-            }
-        }, [
-            React.createElement('div', {
-                key: 'chat-header',
-                style: {
-                    padding: '16px',
-                    borderBottom: '1px solid var(--terminal-border)',
-                    background: 'var(--terminal-bg-light)'
-                }
-            }, [
-                React.createElement('h3', {
-                    key: 'title',
-                    style: {
-                        color: 'var(--terminal-text-bright)',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        margin: 0,
-                        fontFamily: 'inherit'
-                    }
-                }, 'Active Session')
-            ]),
-
-            React.createElement('div', {
-                key: 'messages-container',
-                className: 'messages-container scrollbar',
-                style: {
-                    flex: 1,
-                    padding: '16px',
-                    overflowY: 'auto'
-                }
-            }, messages.map(message =>
-                React.createElement('div', {
-                    key: message.id,
-                    className: `message message-${message.type}`,
-                    style: {
-                        marginBottom: '12px',
-                        padding: '12px 16px',
-                        borderLeft: '3px solid ' + (
-                            message.type === 'system' ? 'var(--terminal-green)' :
-                            message.type === 'error' ? 'var(--terminal-red)' :
-                            'var(--terminal-cyan)'
-                        ),
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: '0 4px 4px 0'
-                    }
-                }, [
-                    React.createElement('div', {
-                        key: 'header',
-                        style: {
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '6px'
-                        }
-                    }, [
-                        React.createElement('span', {
-                            key: 'type',
-                            style: {
-                                color: message.type === 'system' ? 'var(--terminal-green)' :
-                                       message.type === 'error' ? 'var(--terminal-red)' :
-                                       'var(--terminal-cyan)',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                textTransform: 'uppercase'
-                            }
-                        }, message.type),
-                        React.createElement('span', {
-                            key: 'time',
-                            style: {
-                                color: 'var(--terminal-text-dim)',
-                                fontSize: '10px'
-                            }
-                        }, message.timestamp)
-                    ]),
-                    React.createElement('div', {
-                        key: 'content',
-                        style: {
-                            color: 'var(--terminal-text)',
-                            fontSize: '13px',
-                            lineHeight: '1.4'
-                        }
-                    }, message.content)
-                ])
-            ))
-        ]);
-    }
 
     render() {
         const { currentView } = this.state;
@@ -289,8 +168,7 @@ class MainContent extends React.Component {
                 }
             },
                 currentView === 'welcome' ? this.renderWelcomeView() :
-                currentView === 'chat' ? this.renderAIChatView() :
-                this.renderChatView()
+                this.renderAIChatView()
             )
         ]);
     }
