@@ -1,0 +1,8 @@
+{
+  "model": "zai-glm-4.6",
+  "messages": [
+    {"role": "user", "content": "Explica brevemente qué es la inteligencia artificial"}
+  ],
+  "max_tokens": 150,
+  "temperature": 0.7
+}

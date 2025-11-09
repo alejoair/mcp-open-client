@@ -137,10 +137,81 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     msg_dict["name"] = msg.name
                 messages_dict.append(msg_dict)
 
-            # Prepare tools for the request if provided
-            tools_dict = None
+            # Prepare tools for the request - always include default test tools
+            default_tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "calculate",
+                        "description": "Perform mathematical calculations",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "expression": {
+                                    "type": "string",
+                                    "description": "Mathematical expression to calculate"
+                                }
+                            },
+                            "required": ["expression"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_current_time",
+                        "description": "Get the current time and date",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "timezone": {
+                                    "type": "string",
+                                    "description": "Timezone (default: UTC)"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_web",
+                        "description": "Search the web for information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Search query"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather information for a location",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "Location to get weather for"
+                                }
+                            },
+                            "required": ["location"]
+                        }
+                    }
+                }
+            ]
+
+            tools_dict = default_tools
             if request.tools:
-                tools_dict = [tool.dict() for tool in request.tools]
+                # Add any additional tools from the request
+                tools_dict.extend([tool.dict() for tool in request.tools])
 
             # Start streaming response
             yield "data: {\"type\": \"start\"}\n\n"
@@ -159,7 +230,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
                     tools=tools_dict,
-                    tool_choice=request.tool_choice
+                    tool_choice="auto"  # Use "auto" to allow model to decide when to use tools
                 ):
                     if isinstance(data_chunk, dict):
                         # Handle structured data with separate reasoning/content/tool_calls
